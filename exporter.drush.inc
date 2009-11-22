@@ -109,8 +109,7 @@ function drush_ce_dump() {
       $module_exports = drush_ce_get_module_exports($module, $exports[$table]);
       // Override or add.
       $module_exports = array_merge($module_exports,
-                                    drush_ce_get_exportables($table, $exports[$table], $entries)
-      );
+                                    drush_ce_get_exportables($table, $exports[$table], $entries));
       $reexport[$api][$table] = $module_exports;
     }
   }
@@ -121,6 +120,18 @@ function drush_ce_dump() {
     foreach ($tables as $table => $objects) {
       $export = $exports[$table];
       if (function_exists($export['to hook code callback'])) {
+        // Having their own export function means that we can only export the
+        // whole shebang. Figure out what that means and ask the user if it's
+        // OK.
+        $extra = array();
+        foreach ($objects as $name => $object) {
+          if (!in_array($name, $dump[$table])) {
+            $extra[] = $name;
+          }
+        }
+        drpr($extra);
+        //drush_ce_get_exportables($table, $export);
+
         return drush_set_error(dt('Sorry @type defines its own export function, we don\'t suport that.', array('@type' => $table)));      
       } else {
         $output = "/**\n";
