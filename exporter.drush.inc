@@ -72,23 +72,21 @@ function drush_ce_dump() {
 
   $arguments = func_get_args();
   if (empty($arguments)) {
-    return drush_set_error(dt('No types specified.'));
+    return drush_set_error(dt('No exportables specified.'));
   }
   
+  foreach ($arguments as $arg) {
+    list($table, $name) = explode(':', $arg, 2);
+    if (!$name) {
+      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));      
+    } else {
+      $dump[$table][] = $name;
+    }
+  }
+
   $reexport = array();
   $exports = drush_ce_get_schemas();
-  foreach ($arguments as $type) {
-    $found = FALSE;
-    foreach ($exports as $table => $export) {
-      if ($export['api']['api'] == $type) {
-        $reexport[$type][] = $table;
-        $found = TRUE;
-      }
-    }
-    if (!$found) {
-      return drush_set_error(dt("Unknown api '@type'.", array('@type' => $type)));      
-    }
-    /*
+  foreach ($dump as $table => $entries) {
     if ($exports[$table]) {
       $site_exportables = drush_ce_get_exportables($table, $exports[$table]);
       foreach ($entries as $entry) {
@@ -102,12 +100,8 @@ function drush_ce_dump() {
     } else {
       return drush_set_error(dt('Unknown type @type.', array('@type' => $table)));      
     }
-    */
   }
 
-  drpr($reexport);
-  return;
-  
   $out = array();
   // Now, add in the existing ones.
   foreach ($reexport as $api => $tables) {
