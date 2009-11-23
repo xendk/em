@@ -5,13 +5,22 @@ status:
 list hvilke der er overridden
 
 reset:
-få defaults listen, check om nogen er overridden, hvis, generer ny default fil
+slet overrideen
 
 dump:
-exporter navngivne til fil, bevar eksisterende
+exporter navngivne til fil, bevar eksisterende (for så vidt muligt)
+
+del:
+slet given export
+
+update:
+reexport alle overridden
 
 list:
 vis alle exportables vi kan klare
+
+diff:
+vis forskelle (hvis det er muligt)
 
  */
 function exporter_drush_command() {
@@ -164,6 +173,7 @@ function drush_ce_dump() {
   // fact in the site root. Odd.
   $old = getcwd();
   chdir(drush_cwd());
+  // TODO: The api hook and the dependencies.
   foreach ($code as $api => $hook_code) {
     $file_code = "<?php\n";
     $file_code .= "// \$Id" . ": $\n\n";
