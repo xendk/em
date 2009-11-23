@@ -157,7 +157,24 @@ function drush_ce_dump() {
       }
     }
   }
-  drpr($code);
+
+  // Write new files.
+  // Apparently drush thinks we're in the modules directory, while we're in
+  // fact in the site root. Odd.
+  $old = getcwd();
+  chdir(drush_cwd());
+  foreach ($code as $api => $hook_code) {
+    $file_code = "<?php\n";
+    $file_code .= "// \$Id" . ": $\n\n";
+    $file_code .= "/**\n";
+    $file_code .= " * @file\n";
+    $file_code .= " * Bulk export of $api objects exported by Drush ce.\n";
+    $file_code .= " */\n\n";
+    $file_code .= $hook_code;
+    file_put_contents($module . '.' . $api . '.inc.new', $file_code);
+  }
+  chdir($old);
+  drush_print('Done.');
 }
 
 function drush_ce_list() {
