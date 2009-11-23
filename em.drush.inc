@@ -1,68 +1,61 @@
 <?php
 
 /*
-status:
+em status:
 list hvilke der er overridden
 
-reset:
+em reset:
 slet overrideen
 
-dump:
+em dump:
 exporter navngivne til fil, bevar eksisterende (for så vidt muligt)
 
-del:
+em del:
 slet given export
 
-update:
+em update:
 reexport alle overridden
 
-list:
+em list:
 vis alle exportables vi kan klare
 
-diff:
+em diff:
 vis forskelle (hvis det er muligt)
 
  */
-function exporter_drush_command() {
-  $items['exporter test'] = array(
-    'callback' => 'exporter_exporter_test',
-    // 'arguments' => array('domain.com' => dt('The domain of the site to install.')),
-    // 'description' => dt('Provision a new site using the provided data.'),
-    // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
-
-  $items['ce status'] = array(
-    'callback' => 'exporter_ce_status',
+function em_drush_command() {
+  $items['em status'] = array(
+    'callback' => 'drush_em_status',
     // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
   );
 
-  $items['ce dump'] = array(
-    'callback' => 'drush_ce_dump',
+  $items['em dump'] = array(
+    'callback' => 'drush_em_dump',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to add.'
     ),
   );
 
-  $items['ce list'] = array(
-    'callback' => 'drush_ce_list',
+  $items['em list'] = array(
+    'callback' => 'drush_em_list',
   );
   return $items;
 }
 
-function exporter_ce_status() {
-  if (!$module = drush_ce_get_module()) {
+function drush_em_status() {
+  if (!$module = drush_em_get_module()) {
     return FALSE;
   }
 
   // Now, find out what exportables that's available.
-  $export_schemas = drush_ce_get_schemas();
+  $export_schemas = drush_em_get_schemas();
 
   foreach ($export_schemas as $table => $export) {
     $site_exports = array();
-    $module_exports = drush_ce_get_module_exports($module, $export);
+    $module_exports = drush_em_get_module_exports($module, $export);
     if (sizeof($module_exports)) {
       // Now load the same objects from the site.
-      $site_exports = drush_ce_get_exportables($table, $export, $module_exports);
+      $site_exports = drush_em_get_exportables($table, $export, $module_exports);
       foreach ($site_exports as $name => $export) {
         $output[$table] .= "  " . $name . ': ' . ($export->export_type == EXPORT_IN_CODE ? 'Normal' : 'Overridden') . "\n";
       }
@@ -74,8 +67,8 @@ function exporter_ce_status() {
   }
 }
 
-function drush_ce_dump() {
-  if (!$module = drush_ce_get_module()) {
+function drush_em_dump() {
+  if (!$module = drush_em_get_module()) {
     return FALSE;
   }
 
@@ -94,10 +87,10 @@ function drush_ce_dump() {
   }
 
   $reexport = array();
-  $exports = drush_ce_get_schemas();
+  $exports = drush_em_get_schemas();
   foreach ($dump as $table => $entries) {
     if ($exports[$table]) {
-      $site_exportables = drush_ce_get_exportables($table, $exports[$table]);
+      $site_exportables = drush_em_get_exportables($table, $exports[$table]);
       foreach ($entries as $entry) {
         if (!$site_exportables[$entry]) {
           return drush_set_error(dt("Unknown @type '@entry'.", array('@type' => $table, '@entry' => $entry)));
@@ -115,10 +108,10 @@ function drush_ce_dump() {
   // Now, add in the existing ones.
   foreach ($reexport as $api => $tables) {
     foreach ($tables as $table => $entries) {
-      $module_exports = drush_ce_get_module_exports($module, $exports[$table]);
+      $module_exports = drush_em_get_module_exports($module, $exports[$table]);
       // Override or add.
       $module_exports = array_merge($module_exports,
-                                    drush_ce_get_exportables($table, $exports[$table], $entries));
+                                    drush_em_get_exportables($table, $exports[$table], $entries));
       $reexport[$api][$table] = $module_exports;
     }
   }
@@ -188,12 +181,12 @@ function drush_ce_dump() {
   drush_print('Done.');
 }
 
-function drush_ce_list() {
+function drush_em_list() {
   // Find out what exportables that's available.
-  $export_schemas = drush_ce_get_schemas();
+  $export_schemas = drush_em_get_schemas();
 
   foreach ($export_schemas as $table => $export) {
-    $site_exports = drush_ce_get_exportables($table, $export);
+    $site_exports = drush_em_get_exportables($table, $export);
     foreach ($site_exports as $name => $export) {
       if ($export->export_type == EXPORT_IN_DATABASE) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
@@ -207,7 +200,7 @@ function drush_ce_list() {
 }
 
 
-function drush_ce_get_module_exports($module, $export) {
+function drush_em_get_module_exports($module, $export) {
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
   $old = getcwd();
@@ -225,7 +218,7 @@ function drush_ce_get_module_exports($module, $export) {
 }
 
 
-function drush_ce_get_schemas() {
+function drush_em_get_schemas() {
   // Now, find out what exportables that's available.
   ctools_include('export');
   $schemas = ctools_export_get_schemas(TRUE);
@@ -239,7 +232,7 @@ function drush_ce_get_schemas() {
   return $export_schemas;
 }
 
-function drush_ce_get_exportables($table, $export, $exportables = NULL) {
+function drush_em_get_exportables($table, $export, $exportables = NULL) {
   if (is_null($exportables) and function_exists($export['list callback'])) {
     $exportables = $export['list callback']();
   }
@@ -248,7 +241,7 @@ function drush_ce_get_exportables($table, $export, $exportables = NULL) {
 }
 
 
-function drush_ce_get_module() {
+function drush_em_get_module() {
   // Find a module.
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
@@ -267,129 +260,4 @@ function drush_ce_get_module() {
     // TODO: if more than one, list and provide argument.
     return drush_set_error(dt('No module.'));
   }
-}
-
-
-function exporter_find_module() {
-  // Apparently drush thinks we're in the modules directory, while we're in
-  // fact in the site root. Odd.
-  $old = getcwd();
-  chdir(drush_cwd());
-  $modules = glob('*.module');
-  chdir($old);
-  $res = array();
-  foreach ($modules as $name) {
-    $res[] = basename($name, '.module');
-  }
-  return $res;
-}
-
-function drpr($x) {
-  drush_print_r($x);
-  drush_print('');
-}
-
-
-function exporter_exporter_test() {
-  ctools_include('export');
-  $schemas = ctools_export_get_schemas(TRUE);
-  $exportables = $export_tables = array();
-
-  foreach ($schemas as $table => $schema) {
-    if (function_exists($schema['export']['list callback'])) {
-      $exportables[$table] = $schema['export']['list callback']();
-      $export_tables[$table] = $schema['module'];
-    }
-  }
-
-  // drush_print(print_r($exportables, TRUE));
-  // drush_print(print_r($export_tables, TRUE));
-
-  
-  $code = array();
-  $module = 'foo';
-
-  foreach ($exportables as $table => $names) {
-    $names = array_keys(array_filter($names));
-    if ($names) {
-      ctools_export_to_hook_code($code, $table, $names, $module);
-    }
-  }
-
-  $module_code = '';
-  $apis = array();
-  $files = array();
-  $dependencies = array();
-  foreach ($code as $module => $api_info) {
-    if ($module == 'general') {
-      $module_code .= $api_info;
-    }
-    else {
-      foreach ($api_info as $api => $info) {
-        $api_code = "  if (\$module == '$module' && \$api == '$api') {\n";
-        $api_code .= "    return array('version' => $info[version]);\n";
-        $api_code .= "  }\n";
-        $apis[] = array('module' => $module, 'api' => $api, 'code' => $api_code);
-        $dependencies[$module] = TRUE;
-
-        $file = $module . '.' . $api . '.inc';
-        $code = "<?php\n";
-        $code .= "// \$Id" . ": $\n\n";
-        $code .= "/**\n";
-        $code .= " * @file\n";
-        $code .= " * Bulk export of $api objects generated by Bulk export module.\n";
-        $code .= " */\n\n";
-        $code .= $info['code'];
-        // TODO: if the file exists, check if it contains any exportables
-        // which we're not exporting now. If that's the case, we need to build
-        // our own code (steal from ctools_export_to_hook_code) and merge it
-        // with what we got by loading the original file and merging the
-        // object in
-        $files[$file] = $code;
-      }
-    }
-  }
-
-  // TODO: check the module file to see if the api is defined, add it in if not.
-  // Add hook_ctools_plugin_api at the top of the module code, if there is any.
-  // if ($api_code) {
-  //   $api =  "/**\n";
-  //   $api .= " * Implementation of hook_ctools_plugin_api().\n";
-  //   $api .= " */\n";
-  //   $api .= "function $form_state[module]_ctools_plugin_api(\$module, \$api) {\n";
-  //   $api .= $api_code;
-  //   $api .= "}\n";
-  //   $module_code = $api . $module_code;
-  // }
-
-
-  // if ($module_code) {
-  //   $module =  "<?php\n";
-  //   $module .= "// \$Id" . ": $\n\n";
-  //   $module .= "/**\n";
-  //   $module .= " * @file\n";
-  //   $module .= " * Bulk export of objects generated by Bulk export module.\n";
-  //   $module .= " */\n\n";
-  //   $module .= $module_code;
-  //   $output = drupal_get_form('ctools_export_form', $module, t('Place this in @file', array('@file' => $form_state['module'] . '.module'))) . $output;
-  // }
-
-  // TODO: Check the dependencies. Add in the missing.
-  // $info  = "; \$Id" . ": $\n"; // The break in the string prevents CVS from subbing the ID.
-  // $info .= strtr("name = @module export module\n", array('@module' => $form_state['module']));
-  // $info .= strtr("description = Export objects from CTools\n", array('@module' => $form_state['values']['name']));
-  // foreach ($dependencies as $module => $junk) {
-  //   $info .= "dependencies[] = $module\n";
-  // }
-  // $info .= "package = Chaos tool suite\n";
-  // $info .= "core = 6.x\n";
-
-
-  
-  
-  drush_print(print_r(array(
-                        'module_code' => $module_code,
-                        'apis' => $apis,
-                        'files' => $files,
-                        'dependencies' => $dependencies), TRUE));
 }
