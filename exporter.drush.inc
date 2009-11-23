@@ -93,7 +93,7 @@ function drush_ce_dump() {
         if (!$site_exportables[$entry]) {
           return drush_set_error(dt("Unknown @type '@entry'.", array('@type' => $table, '@entry' => $entry)));
         } else {
-          $reexport[$exports[$table]['api']['api']][$table][] = $entry;
+          $reexport[$exports[$table]['api']['api']][$table][$entry] = $entry;
         }
         
       }
@@ -120,6 +120,7 @@ function drush_ce_dump() {
     foreach ($tables as $table => $objects) {
       $export = $exports[$table];
       if (function_exists($export['to hook code callback'])) {
+        drpr(array_keys($objects));
         // Having their own export function means that we can only export the
         // whole shebang. Figure out what that means and ask the user if it's
         // OK.
@@ -139,7 +140,7 @@ function drush_ce_dump() {
         if ($table == 'page_manager_pages') {
           page_manager_get_tasks();
         }
-        
+
         $output = $export['to hook code callback'](array_keys($objects), $module);
         $code[$api] = $output;
       } else {
@@ -185,7 +186,7 @@ function drush_ce_list() {
     $site_exports = drush_ce_get_exportables($table, $export);
     foreach ($site_exports as $name => $export) {
       if ($export->export_type == EXPORT_IN_DATABASE) {
-        $output[$table] .= "  " . $name . "\n";
+        $output[$table] .= "  " . $table . ':'. $name . "\n";
       }
     }
   }
