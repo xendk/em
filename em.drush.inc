@@ -175,7 +175,10 @@ function drush_em_dump() {
     $file_code .= " * Bulk export of $api objects exported by Drush ce.\n";
     $file_code .= " */\n\n";
     $file_code .= $hook_code;
-    file_put_contents($module . '.' . $api . '.inc.new', $file_code);
+    $filename = $module . '.' . $api . '.inc';
+    file_put_contents($filename . '.new', $file_code);
+    rename($filename, $filename . '.em~');
+    rename($filename . '.new', $filename);
   }
   chdir($old);
   drush_print('Done.');
