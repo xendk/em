@@ -129,10 +129,19 @@ function drush_ce_dump() {
             $extra[] = $name;
           }
         }
-        drpr($extra);
-        //drush_ce_get_exportables($table, $export);
 
-        return drush_set_error(dt('Sorry @type defines its own export function, we don\'t suport that.', array('@type' => $table)));      
+        drush_print(dt('@type defines its own export function, so we have to export all overridden objects.', array('@type' => $table)));
+        if (!drush_confirm(dt('This will also export @objects, continue?', array('@objects' => join(', ', $extra))))) {
+          return drush_set_error('Aborting.');
+        }
+
+        // TODO: For some reason, the right task include might not be loaded, so we tickle it here.
+        if ($table == 'page_manager_pages') {
+          page_manager_get_tasks();
+        }
+        
+        $output = $export['to hook code callback'](array_keys($objects), $module);
+        $code[$api] = $output;
       } else {
         $output = "/**\n";
         $output .= " * Implementation of hook_{$export['default hook']}()\n";
