@@ -4,7 +4,7 @@
 em status: * bedre listing?
 list hvilke der er overridden
 
-em reset: * funker. Kunne have bedre argumenter (patterns?)
+em revert: * funker. Kunne have bedre argumenter (patterns?)
 * understøttelse af flere typer
 slet overrideen
 ikke så ligetil.. De forskellige exportables har forskellige måder at slette
@@ -32,10 +32,10 @@ function em_drush_command() {
     // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
   );
 
-  $items['em reset'] = array(
-    'callback' => 'drush_em_reset',
+  $items['em revert'] = array(
+    'callback' => 'drush_em_revert',
     'arguments' => array(
-      'exportables' => 'Space delimited list of exportables to reset, or all to reset all module defined exportables.'
+      'exportables' => 'Space delimited list of exportables to revert, or \'all\' to revert all module defined exportables.'
     ),
   );
   
@@ -77,7 +77,7 @@ function drush_em_status() {
   }
 }
 
-function drush_em_reset() {
+function drush_em_revert() {
   if (!$module = drush_em_get_module()) {
     return FALSE;
   }  
@@ -139,10 +139,10 @@ function drush_em_reset() {
           panels_mini_delete($object);
           break;
         default:
-          drush_set_error(dt('Don\' know how to reset @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
+          drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
           break 2;
       }
-      drush_print(dt('Reset @name.', array('@name' => $name)));
+      drush_print(dt('Reverted @name.', array('@name' => $name)));
     }
   }
   drush_print(dt('Done.'));
