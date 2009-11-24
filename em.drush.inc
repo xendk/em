@@ -119,6 +119,8 @@ function drush_em_dump() {
   $code = array();
   // Generate new file content.
   foreach ($reexport as $api => $tables) {
+    // Sort tables to keep a stable ordering.
+    ksort($tables);
     foreach ($tables as $table => $objects) {
       $export = $exports[$table];
       if (function_exists($export['to hook code callback'])) {
@@ -141,9 +143,8 @@ function drush_em_dump() {
         if ($table == 'page_manager_pages') {
           page_manager_get_tasks();
         }
-
         $output = $export['to hook code callback'](array_keys($objects), $module);
-        $code[$api] = $output;
+        $code[$api] .= $output;
       } else {
         $output = "/**\n";
         $output .= " * Implementation of hook_{$export['default hook']}()\n";
@@ -155,7 +156,7 @@ function drush_em_dump() {
         }
         $output .= " return \${$export['identifier']}s;\n";
         $output .= "}\n";
-        $code[$api] = $output;
+        $code[$api] .= $output;
       }
     }
   }
@@ -174,14 +175,19 @@ function drush_em_dump() {
     $file_code .= " * Bulk export of $api objects exported by Drush ce.\n";
     $file_code .= " */\n\n";
     $file_code .= $hook_code;
-    $filename = $module . '.' . $api . '.inc';
-    file_put_contents($filename . '.new', $file_code);
-    rename($filename, $filename . '.em~');
-    rename($filename . '.new', $filename);
+    drush_em_write($module . '.' . $api . '.inc', $file_code);
   }
   chdir($old);
   drush_print('Done.');
 }
+
+function drush_em_write($filename, $content) {
+  // Still write the new file.
+  file_put_contents($filename . '.new', $content);
+  drush_op('rename', $filename, $filename . '.em~');
+  drush_op('rename', $filename . '.new', $filename);  
+}
+
 
 function drush_em_list() {
   // Find out what exportables that's available.
