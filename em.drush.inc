@@ -122,7 +122,6 @@ function drush_em_dump() {
     foreach ($tables as $table => $objects) {
       $export = $exports[$table];
       if (function_exists($export['to hook code callback'])) {
-        drpr(array_keys($objects));
         // Having their own export function means that we can only export the
         // whole shebang. Figure out what that means and ask the user if it's
         // OK.
