@@ -134,11 +134,12 @@ function drush_em_dump() {
           }
         }
 
-        drush_print(dt('@type defines its own export function, so we have to export all overridden objects.', array('@type' => $table)));
-        if (!drush_confirm(dt('This will also export @objects, continue?', array('@objects' => join(', ', $extra))))) {
-          return drush_set_error('Aborting.');
+        if (sizeof($extra) > 0) {
+          drush_print(dt('@type defines its own export function, so we have to export all overridden objects.', array('@type' => $table)));
+          if (!drush_confirm(dt('This will also export @objects, continue?', array('@objects' => join(', ', $extra))))) {
+            return drush_set_error('Aborting.');
+          }
         }
-
         // TODO: For some reason, the right task include might not be loaded, so we tickle it here.
         if ($table == 'page_manager_pages') {
           page_manager_get_tasks();
