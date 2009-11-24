@@ -1,13 +1,16 @@
 <?php
 
 /*
-em status:
+em status: * bedre listing?
 list hvilke der er overridden
 
-em reset:
+em reset: * funker. Kunne have bedre argumenter (patterns?)
+* understøttelse af flere typer
 slet overrideen
+ikke så ligetil.. De forskellige exportables har forskellige måder at slette
+på, og der er ikke noget generelt callback. Vi må have en liste.
 
-em dump:
+em dump: funker, kunne have bedre argumenter
 exporter navngivne til fil, bevar eksisterende (for så vidt muligt)
 
 em del:
@@ -16,7 +19,7 @@ slet given export
 em update:
 reexport alle overridden
 
-em list:
+em list: virker. bedre listing?
 vis alle exportables vi kan klare
 
 em diff:
@@ -29,6 +32,13 @@ function em_drush_command() {
     // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
   );
 
+  $items['em reset'] = array(
+    'callback' => 'drush_em_reset',
+    'arguments' => array(
+      'exportables' => 'Space delimited list of exportables to reset, or all to reset all module defined exportables.'
+    ),
+  );
+  
   $items['em dump'] = array(
     'callback' => 'drush_em_dump',
     'arguments' => array(
@@ -66,6 +76,78 @@ function drush_em_status() {
     drush_print($listing);
   }
 }
+
+function drush_em_reset() {
+  if (!$module = drush_em_get_module()) {
+    return FALSE;
+  }  
+
+  $arguments = func_get_args();
+  if (empty($arguments)) {
+    return drush_set_error(dt('No exportables specified.'));
+  }
+  $all = FALSE;
+  if (in_array('all', $arguments)) {
+    $all = TRUE;
+  }
+
+  $resetables = array();
+  // Find resettables
+  $exports = drush_em_get_schemas();
+  foreach ($exports as $table => $export) {
+    $module_exports = drush_em_get_module_exports($module, $exports[$table]);
+    $site_exports = drush_em_get_exportables($table, $exports[$table], $module_exports);
+    foreach ($site_exports as $name => $object) {
+      if ($object->export_type & EXPORT_IN_DATABASE) {
+        $resetables[$table][$name] = $object;
+      }
+    }
+  }
+  // Filter to specified.
+  foreach ($arguments as $arg) {
+    if ($arg == 'all') {
+      $reset = $resetables;
+      break;
+    }
+    list($table, $name) = explode(':', $arg, 2);
+    if (!$name) {
+      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));      
+    } else {
+      if ($resetables[$table][$name]) {
+        $reset[$table][$name] = $resetables[$table][$name];
+      } else {
+        return drush_set_error(dt('Unknown exportable @name.', array('@name' => $arg)));      
+      }
+    }
+  }
+
+  foreach ($reset as $table => $objects) {
+    foreach ($objects as $name => $object) {
+      switch ($table) {
+        case 'page_manager_pages':
+          // TODO: For some reason, the right task include might not be loaded, so we tickle it here.
+          if (!$loaded) {
+            page_manager_get_tasks();
+            $loaded = TRUE;
+          }
+          page_manager_page_delete($object);
+          break;
+        case 'page_manager_handlers':
+          page_manager_delete_task_handler($object);
+          break;
+        case 'panels_mini':
+          panels_mini_delete($object);
+          break;
+        default:
+          drush_set_error(dt('Don\' know how to reset @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
+          break 2;
+      }
+      drush_print(dt('Reset @name.', array('@name' => $name)));
+    }
+  }
+  drush_print(dt('Done.'));
+}
+
 
 function drush_em_dump() {
   if (!$module = drush_em_get_module()) {
