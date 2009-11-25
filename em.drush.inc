@@ -28,44 +28,59 @@ vis forskelle (hvis det er muligt)
  */
 function em_drush_command() {
   $items['em status'] = array(
-    'callback' => 'drush_em_status',
+    // We're skipping the customary drush_ prefix, as it increases the chance
+    // of colliding with a hook.
+    'callback' => 'em_status',
     // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
   );
 
   $items['em revert'] = array(
-    'callback' => 'drush_em_revert',
+    'callback' => 'em_revert',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to revert, or \'all\' to revert all module defined exportables.'
     ),
   );
   
   $items['em dump'] = array(
-    'callback' => 'drush_em_dump',
+    'callback' => 'em_dump',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to add.'
     ),
   );
 
   $items['em list'] = array(
-    'callback' => 'drush_em_list',
+    'callback' => 'em_list',
   );
   return $items;
 }
 
-function drush_em_status() {
-  if (!$module = drush_em_get_module()) {
+/**
+ * Defines aliases for exportable types.
+ */
+function em_tables() {
+  static $tables;
+  if (!$tables) {
+    $tables = array(
+      'pages' => 'page_manager_pages',
+    );
+  }
+}
+
+
+function em_status() {
+  if (!$module = em_get_module()) {
     return FALSE;
   }
 
   // Now, find out what exportables that's available.
-  $export_schemas = drush_em_get_schemas();
+  $export_schemas = em_get_schemas();
 
   foreach ($export_schemas as $table => $export) {
     $site_exports = array();
-    $module_exports = drush_em_get_module_exports($module, $export);
+    $module_exports = em_get_module_exports($module, $export);
     if (sizeof($module_exports)) {
       // Now load the same objects from the site.
-      $site_exports = drush_em_get_exportables($table, $export, $module_exports);
+      $site_exports = em_get_exportables($table, $export, $module_exports);
       foreach ($site_exports as $name => $export) {
         $output[$table] .= "  " . $name . ': ' . ($export->export_type == EXPORT_IN_CODE ? 'Normal' : 'Overridden') . "\n";
       }
@@ -77,8 +92,8 @@ function drush_em_status() {
   }
 }
 
-function drush_em_revert() {
-  if (!$module = drush_em_get_module()) {
+function em_revert() {
+  if (!$module = em_get_module()) {
     return FALSE;
   }  
 
@@ -93,10 +108,10 @@ function drush_em_revert() {
 
   $resetables = array();
   // Find resettables
-  $exports = drush_em_get_schemas();
+  $exports = em_get_schemas();
   foreach ($exports as $table => $export) {
-    $module_exports = drush_em_get_module_exports($module, $exports[$table]);
-    $site_exports = drush_em_get_exportables($table, $exports[$table], $module_exports);
+    $module_exports = em_get_module_exports($module, $exports[$table]);
+    $site_exports = em_get_exportables($table, $exports[$table], $module_exports);
     foreach ($site_exports as $name => $object) {
       if ($object->export_type & EXPORT_IN_DATABASE) {
         $resetables[$table][$name] = $object;
@@ -149,8 +164,8 @@ function drush_em_revert() {
 }
 
 
-function drush_em_dump() {
-  if (!$module = drush_em_get_module()) {
+function em_dump() {
+  if (!$module = em_get_module()) {
     return FALSE;
   }
 
@@ -169,10 +184,10 @@ function drush_em_dump() {
   }
 
   $reexport = array();
-  $exports = drush_em_get_schemas();
+  $exports = em_get_schemas();
   foreach ($dump as $table => $entries) {
     if ($exports[$table]) {
-      $site_exportables = drush_em_get_exportables($table, $exports[$table]);
+      $site_exportables = em_get_exportables($table, $exports[$table]);
       foreach ($entries as $entry) {
         if (!$site_exportables[$entry]) {
           return drush_set_error(dt("Unknown @type '@entry'.", array('@type' => $table, '@entry' => $entry)));
@@ -190,10 +205,10 @@ function drush_em_dump() {
   // Now, add in the existing ones.
   foreach ($reexport as $api => $tables) {
     foreach ($tables as $table => $entries) {
-      $module_exports = drush_em_get_module_exports($module, $exports[$table]);
+      $module_exports = em_get_module_exports($module, $exports[$table]);
       // Override or add.
       $module_exports = array_merge($module_exports,
-                                    drush_em_get_exportables($table, $exports[$table], $entries));
+                                    em_get_exportables($table, $exports[$table], $entries));
       $reexport[$api][$table] = $module_exports;
     }
   }
@@ -258,13 +273,13 @@ function drush_em_dump() {
     $file_code .= " * Bulk export of $api objects exported by Drush ce.\n";
     $file_code .= " */\n\n";
     $file_code .= $hook_code;
-    drush_em_write($module . '.' . $api . '.inc', $file_code);
+    em_write($module . '.' . $api . '.inc', $file_code);
   }
   chdir($old);
   drush_print('Done.');
 }
 
-function drush_em_write($filename, $content) {
+function em_write($filename, $content) {
   // Still write the new file.
   file_put_contents($filename . '.new', $content);
   drush_op('rename', $filename, $filename . '.em~');
@@ -272,12 +287,12 @@ function drush_em_write($filename, $content) {
 }
 
 
-function drush_em_list() {
+function em_list() {
   // Find out what exportables that's available.
-  $export_schemas = drush_em_get_schemas();
+  $export_schemas = em_get_schemas();
 
   foreach ($export_schemas as $table => $export) {
-    $site_exports = drush_em_get_exportables($table, $export);
+    $site_exports = em_get_exportables($table, $export);
     foreach ($site_exports as $name => $export) {
       if ($export->export_type == EXPORT_IN_DATABASE) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
@@ -291,7 +306,7 @@ function drush_em_list() {
 }
 
 
-function drush_em_get_module_exports($module, $export) {
+function em_get_module_exports($module, $export) {
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
   $old = getcwd();
@@ -309,7 +324,7 @@ function drush_em_get_module_exports($module, $export) {
 }
 
 
-function drush_em_get_schemas() {
+function em_get_schemas() {
   // Now, find out what exportables that's available.
   ctools_include('export');
   $schemas = ctools_export_get_schemas(TRUE);
@@ -323,7 +338,7 @@ function drush_em_get_schemas() {
   return $export_schemas;
 }
 
-function drush_em_get_exportables($table, $export, $exportables = NULL) {
+function em_get_exportables($table, $export, $exportables = NULL) {
   if (is_null($exportables) and function_exists($export['list callback'])) {
     $exportables = $export['list callback']();
   }
@@ -332,7 +347,7 @@ function drush_em_get_exportables($table, $export, $exportables = NULL) {
 }
 
 
-function drush_em_get_module() {
+function em_get_module() {
   // Find a module.
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
