@@ -48,6 +48,10 @@ function em_drush_command() {
     ),
   );
 
+  $items['em update'] = array(
+    'callback' => 'em_update',
+  );
+  
   $items['em list'] = array(
     'callback' => 'em_list',
   );
@@ -66,6 +70,45 @@ function em_tables() {
   }
 }
 
+function em_export($table = NULL, $key = NULL) {
+  static $export_types = NULL;
+  if (!$export_types) {
+    // TODO: predefined non-ctools types.
+    $export_types = array();
+
+    // Find out what ctools exportables that's available.
+    ctools_include('export');
+    $schemas = ctools_export_get_schemas(TRUE);
+    $export_schemas = array();
+  
+    foreach ($schemas as $etable => $schema) {
+      if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
+        $export_types[$etable] = array(
+          'api' => $schema['export']['api']['api'],
+          'identifier' => $schema['export']['identifier'],
+          'key' => $schema['export']['key'],
+          'export callback' => $schema['export']['export callback'],
+          'default hook' => $schema['export']['default hook'],
+          'list callback' => $schema['export']['list callback'],
+          'to hook code callback' => $schema['export']['to hook code callback'],
+        );
+        $export_schemas[$etable] = $schema['export'];
+      }
+    }
+  }
+
+  if ($export_types['page_manager_pages']) {
+    // Trigger loading of proper incs.
+    $export_types['page_manager_pages']['pre export'] = 'page_manager_get_tasks';
+  }
+  
+  if ($key) {
+    return $export_types[$table][$key];
+  } elseif ($table) {
+    return $export_types[$table];
+  }
+  return $export_types;
+}
 
 function em_status() {
   if (!$module = em_get_module()) {
@@ -279,6 +322,108 @@ function em_dump() {
   drush_print('Done.');
 }
 
+function em_update() {
+  if (!$module = em_get_module()) {
+    return FALSE;
+  }
+
+  // Get overridden module exports.
+  $module_exports = em_get_module_exports_all($module);
+  foreach ($module_exports as $table => $exports) {
+    $site_exports = em_get_site_exportables($table, $exports);
+    foreach ($site_exports as $name => $object) {
+      // TODO: hook(?) for non-ctools tables
+      if (!($object->export_type ^ EXPORT_IN_DATABASE)) {
+        unset($module_exports[$table][$name]);
+      }
+    }
+  }
+
+  // Write files.
+  em_write_exportables($module, $module_exports);
+  // Revert the exports.
+}
+
+function em_write_exportables($module, $exportables) {
+  $code = array();
+
+  $files = array();
+  // Sort tables into api (file) buckets.
+  foreach ($exportables as $table => $objects) {
+    $files[em_export($table, 'api')][$table] = $objects;
+  }
+
+  // Generate new file content.
+  foreach ($files as $api => $tables) {
+    // Sort tables to keep a stable ordering.
+    ksort($tables);
+    foreach ($tables as $table => $objects) {
+      $export = em_export($table);
+      if (function_exists($export['pre export'])) {
+        $export['pre export']();
+      }
+      if (function_exists($export['to hook code callback'])) {
+        // Having their own export function means that we can only export the
+        // whole shebang. Figure out what that means and ask the user if it's
+        // OK.
+        /*
+         TODO:
+         // Get the module's list of objects
+         // check that there's not anyone of those that's not in the set we're exporting
+        $module_exports = em_get_module_exports2($module, $export);
+        $extra = array();
+        foreach ($objects as $name => $object) {
+          if (!in_array($name, $dump[$table])) {
+            $extra[] = $name;
+          }
+        }
+
+        if (sizeof($extra) > 0) {
+          drush_print(dt('@type defines its own export function, so we have to export all overridden objects.', array('@type' => $table)));
+          if (!drush_confirm(dt('This will also export @objects, continue?', array('@objects' => join(', ', $extra))))) {
+            return drush_set_error('Aborting.');
+          }
+        }
+        */
+        $output = $export['to hook code callback'](array_keys($objects), $module);
+        $code[$api] .= $output;
+      } else {
+        $output = "/**\n";
+        $output .= " * Implementation of hook_{$export['default hook']}()\n";
+        $output .= " */\n";
+        $output .= "function " . $module . "_{$export['default hook']}() {\n";
+        foreach ($objects as $object) {
+          $output .= $export['export callback']($object, '  '); // if this function does not exist, better to error out than fail silently
+          $output .= "  \${$export['identifier']}s['" . check_plain($object->$export['key']) . "'] = \${$export['identifier']};\n\n";
+        }
+        $output .= " return \${$export['identifier']}s;\n";
+        $output .= "}\n";
+        $code[$api] .= $output;
+      }
+    }
+  }
+
+  // Write new files.
+  // Apparently drush thinks we're in the modules directory, while we're in
+  // fact in the site root. Odd.
+  $old = getcwd();
+  chdir(drush_cwd());
+  // TODO: The api hook and the dependencies.
+  foreach ($code as $api => $hook_code) {
+    $file_code = "<?php\n";
+    $file_code .= "// \$Id" . ": $\n\n";
+    $file_code .= "/**\n";
+    $file_code .= " * @file\n";
+    $file_code .= " * Bulk export of $api objects exported by Drush ce.\n";
+    $file_code .= " */\n\n";
+    $file_code .= $hook_code;
+    em_write($module . '.' . $api . '.inc', $file_code);
+  }
+  chdir($old);
+  return TRUE;
+}
+
+
 function em_write($filename, $content) {
   // Still write the new file.
   file_put_contents($filename . '.new', $content);
@@ -305,6 +450,35 @@ function em_list() {
   }  
 }
 
+function em_get_module_exports_all($module) {
+  $schemas = em_get_schemas();
+  $all_exportables = array();
+  foreach ($schemas as $table => $export) {
+    $exports = em_get_module_exports($module, $export);
+    if ($exports) {
+      $all_exportables[$table] = $exports;
+    }
+  }
+  return $all_exportables;
+}
+
+function em_get_module_exports2($module, $export) {
+  // Apparently drush thinks we're in the modules directory, while we're in
+  // fact in the site root. Odd.
+  $old = getcwd();
+  chdir(drush_cwd());
+  $hook_file = $module . '.' . $export['api'] . '.inc';
+  if (file_exists($hook_file)) {
+    require_once($hook_file);
+    $hook = $module . "_" . $export['default hook'];
+    if (function_exists($hook)) {
+      $module_exports = $hook();
+    }
+  }
+  chdir($old);
+  return $module_exports;  
+}
+
 
 function em_get_module_exports($module, $export) {
   // Apparently drush thinks we're in the modules directory, while we're in
@@ -324,18 +498,33 @@ function em_get_module_exports($module, $export) {
 }
 
 
-function em_get_schemas() {
-  // Now, find out what exportables that's available.
-  ctools_include('export');
-  $schemas = ctools_export_get_schemas(TRUE);
-  $export_schemas = array();
+function em_get_schemas($name = NULL) {
+  static $export_schemas;
+  if (!$export_schemas) {
+    // Find out what exportables that's available.
+    ctools_include('export');
+    $schemas = ctools_export_get_schemas(TRUE);
+    $export_schemas = array();
   
-  foreach ($schemas as $table => $schema) {
-    if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
-      $export_schemas[$table] = $schema['export'];
+    foreach ($schemas as $table => $schema) {
+      if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
+        $export_schemas[$table] = $schema['export'];
+      }
     }
   }
+  if ($name) {
+    return $export_schemas[$name];
+  }
   return $export_schemas;
+}
+
+function em_get_site_exportables($table, $exportables = NULL) {
+  $export = em_get_schemas($table);
+  if (is_null($exportables) and function_exists($export['list callback'])) {
+    $exportables = $export['list callback']();
+  }
+  $site_exports = ctools_export_load_object($table, 'names', array_keys($exportables));
+  return $site_exports;  
 }
 
 function em_get_exportables($table, $export, $exportables = NULL) {
