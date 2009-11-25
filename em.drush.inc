@@ -70,6 +70,9 @@ function em_tables() {
   }
 }
 
+/**
+ * Defines out exportable types.
+ */
 function em_export($table = NULL, $key = NULL) {
   static $export_types = NULL;
   if (!$export_types) {
@@ -431,7 +434,9 @@ function em_write($filename, $content) {
   drush_op('rename', $filename . '.new', $filename);  
 }
 
-
+/**
+ * TODO: Refactor.
+ */
 function em_list() {
   // Find out what exportables that's available.
   $export_schemas = em_get_schemas();
@@ -450,6 +455,9 @@ function em_list() {
   }  
 }
 
+/**
+ * TODO: Refactor.
+ */
 function em_get_module_exports_all($module) {
   $schemas = em_get_schemas();
   $all_exportables = array();
@@ -462,6 +470,9 @@ function em_get_module_exports_all($module) {
   return $all_exportables;
 }
 
+/**
+ * TODO: Will replace em_get_module_exports.
+ */
 function em_get_module_exports2($module, $export) {
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
@@ -479,7 +490,9 @@ function em_get_module_exports2($module, $export) {
   return $module_exports;  
 }
 
-
+/**
+ * TODO: To be replaced by em_get_module_exports2.
+ */
 function em_get_module_exports($module, $export) {
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
@@ -497,7 +510,9 @@ function em_get_module_exports($module, $export) {
   return $module_exports;
 }
 
-
+/**
+ * TODO: Deprecated by em_export.
+ */
 function em_get_schemas($name = NULL) {
   static $export_schemas;
   if (!$export_schemas) {
@@ -518,6 +533,9 @@ function em_get_schemas($name = NULL) {
   return $export_schemas;
 }
 
+/**
+ * TODO: Refactor.
+ */
 function em_get_site_exportables($table, $exportables = NULL) {
   $export = em_get_schemas($table);
   if (is_null($exportables) and function_exists($export['list callback'])) {
@@ -527,6 +545,9 @@ function em_get_site_exportables($table, $exportables = NULL) {
   return $site_exports;  
 }
 
+/**
+ * TODO: Deprecated.
+ */
 function em_get_exportables($table, $export, $exportables = NULL) {
   if (is_null($exportables) and function_exists($export['list callback'])) {
     $exportables = $export['list callback']();
