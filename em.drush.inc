@@ -60,6 +60,7 @@ function em_drush_command() {
 
 /**
  * Defines aliases for exportable types.
+ * TODO: Actually use this.
  */
 function em_tables() {
   static $tables;
@@ -68,6 +69,7 @@ function em_tables() {
       'pages' => 'page_manager_pages',
     );
   }
+  return $tables;
 }
 
 /**
@@ -182,8 +184,10 @@ function em_revert() {
     }
   }
 
+  // TODO: split out into function, so other functions can use it.
   foreach ($reset as $table => $objects) {
     foreach ($objects as $name => $object) {
+      // TODO: em_export should handle this.
       switch ($table) {
         case 'page_manager_pages':
           // TODO: For some reason, the right task include might not be loaded, so we tickle it here.
@@ -259,6 +263,7 @@ function em_dump() {
     }
   }
 
+  // TODO: Refactor to use em_write_exportables.
   $code = array();
   // Generate new file content.
   foreach ($reexport as $api => $tables) {
@@ -322,6 +327,7 @@ function em_dump() {
     em_write($module . '.' . $api . '.inc', $file_code);
   }
   chdir($old);
+  // TODO: Revert the exports.
   drush_print('Done.');
 }
 
@@ -344,7 +350,7 @@ function em_update() {
 
   // Write files.
   em_write_exportables($module, $module_exports);
-  // Revert the exports.
+  // TODO: Revert the exports.
 }
 
 function em_write_exportables($module, $exportables) {
