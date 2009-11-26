@@ -77,6 +77,19 @@ function em_tables() {
  */
 function em_export($table = NULL, $key = NULL) {
   static $export_types = NULL;
+  static $defaults = array(
+    'page_manager_pages' => array(
+      'pre export' => 'page_manager_get_tasks',
+      'delete hook' => 'em_delete_page_manager_pages',
+    ),
+    'page_manager_handlers' => array(
+      'delete hook' => 'page_manager_delete_task_handler',
+    ),
+    'panels_mini' => array(
+      'delete hook' => 'panels_mini_delete',
+    ),
+  );
+
   if (!$export_types) {
     // TODO: predefined non-ctools types.
     $export_types = array();
@@ -84,7 +97,6 @@ function em_export($table = NULL, $key = NULL) {
     // Find out what ctools exportables that's available.
     ctools_include('export');
     $schemas = ctools_export_get_schemas(TRUE);
-    $export_schemas = array();
   
     foreach ($schemas as $etable => $schema) {
       if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
@@ -97,16 +109,13 @@ function em_export($table = NULL, $key = NULL) {
           'list callback' => $schema['export']['list callback'],
           'to hook code callback' => $schema['export']['to hook code callback'],
         );
-        $export_schemas[$etable] = $schema['export'];
+        if ($defaults[$etable]) {
+          $export_types[$etable] += $defaults[$etable];
+        }
       }
     }
   }
 
-  if ($export_types['page_manager_pages']) {
-    // Trigger loading of proper incs.
-    $export_types['page_manager_pages']['pre export'] = 'page_manager_get_tasks';
-  }
-  
   if ($key) {
     return $export_types[$table][$key];
   } elseif ($table) {
@@ -114,6 +123,18 @@ function em_export($table = NULL, $key = NULL) {
   }
   return $export_types;
 }
+
+function em_delete_page_manager_pages($object) {
+  static $loaded;
+  // For some reason, the right task include might not be loaded, so we tickle it here.
+  if (!$loaded) {
+    page_manager_get_tasks();
+    $loaded = TRUE;
+  }
+  page_manager_page_delete($object);
+  return;
+}
+
 
 function em_status() {
   if (!$module = em_get_module()) {
@@ -156,10 +177,10 @@ function em_revert() {
 
   $resetables = array();
   // Find resettables
-  $exports = em_get_schemas();
+  $exports = em_export();
   foreach ($exports as $table => $export) {
-    $module_exports = em_get_module_exports($module, $exports[$table]);
-    $site_exports = em_get_exportables($table, $exports[$table], $module_exports);
+    $module_exports = em_get_module_exports2($module, $export);
+    $site_exports = em_get_site_exportables($table, $module_exports);
     foreach ($site_exports as $name => $object) {
       if ($object->export_type & EXPORT_IN_DATABASE) {
         $resetables[$table][$name] = $object;
@@ -188,24 +209,10 @@ function em_revert() {
   foreach ($reset as $table => $objects) {
     foreach ($objects as $name => $object) {
       // TODO: em_export should handle this.
-      switch ($table) {
-        case 'page_manager_pages':
-          // TODO: For some reason, the right task include might not be loaded, so we tickle it here.
-          if (!$loaded) {
-            page_manager_get_tasks();
-            $loaded = TRUE;
-          }
-          page_manager_page_delete($object);
-          break;
-        case 'page_manager_handlers':
-          page_manager_delete_task_handler($object);
-          break;
-        case 'panels_mini':
-          panels_mini_delete($object);
-          break;
-        default:
-          drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
-          break 2;
+      if ($exports[$table]['delete hook']) {
+        $exports[$table]['delete hook']($object);
+      } else {
+        drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
       }
       drush_print(dt('Reverted @name.', array('@name' => $name)));
     }
@@ -242,7 +249,7 @@ function em_dump() {
         if (!$site_exportables[$entry]) {
           return drush_set_error(dt("Unknown @type '@entry'.", array('@type' => $table, '@entry' => $entry)));
         } else {
-          $reexport[$exports[$table]['api']['api']][$table][$entry] = $entry;
+          $reexport[$table][$entry] = $entry;
         }
         
       }
@@ -253,80 +260,17 @@ function em_dump() {
 
   $out = array();
   // Now, add in the existing ones.
-  foreach ($reexport as $api => $tables) {
-    foreach ($tables as $table => $entries) {
-      $module_exports = em_get_module_exports($module, $exports[$table]);
-      // Override or add.
-      $module_exports = array_merge($module_exports,
-                                    em_get_exportables($table, $exports[$table], $entries));
-      $reexport[$api][$table] = $module_exports;
-    }
+  foreach ($reexport as $table => $entries) {
+    $export = em_export($table);
+    $module_exports = em_get_module_exports2($module, $export);
+    // Override or add.
+    $module_exports = array_merge($module_exports,
+                                  em_get_site_exportables($table, $entries));
+    $reexport[$table] = $module_exports;
   }
 
-  // TODO: Refactor to use em_write_exportables.
-  $code = array();
-  // Generate new file content.
-  foreach ($reexport as $api => $tables) {
-    // Sort tables to keep a stable ordering.
-    ksort($tables);
-    foreach ($tables as $table => $objects) {
-      $export = $exports[$table];
-      if (function_exists($export['to hook code callback'])) {
-        // Having their own export function means that we can only export the
-        // whole shebang. Figure out what that means and ask the user if it's
-        // OK.
-        $extra = array();
-        foreach ($objects as $name => $object) {
-          if (!in_array($name, $dump[$table])) {
-            $extra[] = $name;
-          }
-        }
-
-        if (sizeof($extra) > 0) {
-          drush_print(dt('@type defines its own export function, so we have to export all overridden objects.', array('@type' => $table)));
-          if (!drush_confirm(dt('This will also export @objects, continue?', array('@objects' => join(', ', $extra))))) {
-            return drush_set_error('Aborting.');
-          }
-        }
-        // TODO: For some reason, the right task include might not be loaded, so we tickle it here.
-        if ($table == 'page_manager_pages') {
-          page_manager_get_tasks();
-        }
-        $output = $export['to hook code callback'](array_keys($objects), $module);
-        $code[$api] .= $output;
-      } else {
-        $output = "/**\n";
-        $output .= " * Implementation of hook_{$export['default hook']}()\n";
-        $output .= " */\n";
-        $output .= "function " . $module . "_{$export['default hook']}() {\n";
-        foreach ($objects as $object) {
-          $output .= $export['export callback']($object, '  '); // if this function does not exist, better to error out than fail silently
-          $output .= "  \${$export['identifier']}s['" . check_plain($object->$export['key']) . "'] = \${$export['identifier']};\n\n";
-        }
-        $output .= " return \${$export['identifier']}s;\n";
-        $output .= "}\n";
-        $code[$api] .= $output;
-      }
-    }
-  }
-
-  // Write new files.
-  // Apparently drush thinks we're in the modules directory, while we're in
-  // fact in the site root. Odd.
-  $old = getcwd();
-  chdir(drush_cwd());
-  // TODO: The api hook and the dependencies.
-  foreach ($code as $api => $hook_code) {
-    $file_code = "<?php\n";
-    $file_code .= "// \$Id" . ": $\n\n";
-    $file_code .= "/**\n";
-    $file_code .= " * @file\n";
-    $file_code .= " * Bulk export of $api objects exported by Drush ce.\n";
-    $file_code .= " */\n\n";
-    $file_code .= $hook_code;
-    em_write($module . '.' . $api . '.inc', $file_code);
-  }
-  chdir($old);
+  em_write_exportables($module, $reexport);
+  
   // TODO: Revert the exports.
   drush_print('Done.');
 }
@@ -375,11 +319,9 @@ function em_write_exportables($module, $exportables) {
         // Having their own export function means that we can only export the
         // whole shebang. Figure out what that means and ask the user if it's
         // OK.
-        /*
-         TODO:
-         // Get the module's list of objects
-         // check that there's not anyone of those that's not in the set we're exporting
-        $module_exports = em_get_module_exports2($module, $export);
+        // Get the module's list of objects
+        // check that there's not anyone of those that's not in the set we're exporting
+        $module_exports = em_get_module_exports2($module);
         $extra = array();
         foreach ($objects as $name => $object) {
           if (!in_array($name, $dump[$table])) {
@@ -393,7 +335,7 @@ function em_write_exportables($module, $exportables) {
             return drush_set_error('Aborting.');
           }
         }
-        */
+        
         $output = $export['to hook code callback'](array_keys($objects), $module);
         $code[$api] .= $output;
       } else {
