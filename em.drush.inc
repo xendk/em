@@ -142,14 +142,14 @@ function em_status() {
   }
 
   // Now, find out what exportables that's available.
-  $export_schemas = em_get_schemas();
+  $export_schemas = em_export();
 
   foreach ($export_schemas as $table => $export) {
     $site_exports = array();
-    $module_exports = em_get_module_exports($module, $export);
+    $module_exports = em_get_module_exports2($module, $export);
     if (sizeof($module_exports)) {
       // Now load the same objects from the site.
-      $site_exports = em_get_exportables($table, $export, $module_exports);
+      $site_exports = em_get_site_exportables($table, $module_exports);
       foreach ($site_exports as $name => $export) {
         $output[$table] .= "  " . $name . ': ' . ($export->export_type == EXPORT_IN_CODE ? 'Normal' : 'Overridden') . "\n";
       }
@@ -241,24 +241,22 @@ function em_dump() {
   }
 
   $reexport = array();
-  $exports = em_get_schemas();
   foreach ($dump as $table => $entries) {
-    if ($exports[$table]) {
-      $site_exportables = em_get_exportables($table, $exports[$table]);
+    if (em_export($table)) {
+      $site_exportables = em_get_site_exportables($table);
       foreach ($entries as $entry) {
         if (!$site_exportables[$entry]) {
-          return drush_set_error(dt("Unknown @type '@entry'.", array('@type' => $table, '@entry' => $entry)));
+          return drush_set_error(dt("Unknown @type '@entry'.",
+                                    array('@type' => $table, '@entry' => $entry)));
         } else {
           $reexport[$table][$entry] = $entry;
         }
-        
       }
     } else {
       return drush_set_error(dt('Unknown type @type.', array('@type' => $table)));      
     }
   }
 
-  $out = array();
   // Now, add in the existing ones.
   foreach ($reexport as $table => $entries) {
     $export = em_export($table);
@@ -387,10 +385,10 @@ function em_write($filename, $content) {
  */
 function em_list() {
   // Find out what exportables that's available.
-  $export_schemas = em_get_schemas();
+  $export_schemas = em_export();
 
   foreach ($export_schemas as $table => $export) {
-    $site_exports = em_get_exportables($table, $export);
+    $site_exports = em_get_site_exportables($table);
     foreach ($site_exports as $name => $export) {
       if ($export->export_type == EXPORT_IN_DATABASE) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
@@ -407,7 +405,7 @@ function em_list() {
  * TODO: Refactor.
  */
 function em_get_module_exports_all($module) {
-  $schemas = em_get_schemas();
+  $schemas = em_export();
   $all_exportables = array();
   foreach ($schemas as $table => $export) {
     $exports = em_get_module_exports($module, $export);
@@ -459,51 +457,17 @@ function em_get_module_exports($module, $export) {
 }
 
 /**
- * TODO: Deprecated by em_export.
- */
-function em_get_schemas($name = NULL) {
-  static $export_schemas;
-  if (!$export_schemas) {
-    // Find out what exportables that's available.
-    ctools_include('export');
-    $schemas = ctools_export_get_schemas(TRUE);
-    $export_schemas = array();
-  
-    foreach ($schemas as $table => $schema) {
-      if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
-        $export_schemas[$table] = $schema['export'];
-      }
-    }
-  }
-  if ($name) {
-    return $export_schemas[$name];
-  }
-  return $export_schemas;
-}
-
-/**
  * TODO: Refactor.
  */
 function em_get_site_exportables($table, $exportables = NULL) {
-  $export = em_get_schemas($table);
+  $export = em_export($table);
   if (is_null($exportables) and function_exists($export['list callback'])) {
     $exportables = $export['list callback']();
   }
+  // TODO: refactor this into em_export
   $site_exports = ctools_export_load_object($table, 'names', array_keys($exportables));
   return $site_exports;  
 }
-
-/**
- * TODO: Deprecated.
- */
-function em_get_exportables($table, $export, $exportables = NULL) {
-  if (is_null($exportables) and function_exists($export['list callback'])) {
-    $exportables = $export['list callback']();
-  }
-  $site_exports = ctools_export_load_object($table, 'names', array_keys($exportables));
-  return $site_exports;
-}
-
 
 function em_get_module() {
   // Find a module.
