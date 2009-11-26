@@ -10,7 +10,7 @@ em revert: * funker. Kunne have bedre argumenter (patterns?)
 em dump: funker, kunne have bedre argumenter
 exporter navngivne til fil, bevar eksisterende (for så vidt muligt)
 
-em del:
+em del: virker
 slet given export
 
 em update: virker.
