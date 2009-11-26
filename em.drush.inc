@@ -45,6 +45,13 @@ function em_drush_command() {
     ),
   );
 
+  $items['em remove'] = array(
+    'callback' => 'em_remove',
+    'arguments' => array(
+      'exportables' => 'Space delimited list of exportables to remove.'
+    ),
+  );
+
   $items['em update'] = array(
     'callback' => 'em_update',
   );
@@ -277,6 +284,45 @@ function em_dump() {
   drush_print('Done.');
 }
 
+function em_remove() {
+  if (!$module = em_get_module()) {
+    return FALSE;
+  }
+
+  // Get arguments.
+  $remove = array();
+  $arguments = func_get_args();
+  if (empty($arguments)) {
+    return drush_set_error(dt('No exportables specified.'));
+  }
+  
+  foreach ($arguments as $arg) {
+    list($table, $name) = explode(':', $arg, 2);
+    if (!$name) {
+      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));      
+    } else {
+      $remove[$table][$name] = $name;
+    }
+  }
+
+  
+  // Get overridden module exports.
+  // TODO: don't bother rewriting files, if we're not messing with it.
+  $module_exports = em_get_module_exports_all($module);
+  foreach ($module_exports as $table => $exports) {
+    $site_exports = em_get_site_exportables($table, $exports);
+    foreach ($site_exports as $name => $object) {
+      if ($remove[$table][$name]) {
+        unset($module_exports[$table][$name]);
+      }
+    }
+  }
+
+  // Write files.
+  em_write_exportables($module, $module_exports);
+  
+}
+
 function em_update() {
   if (!$module = em_get_module()) {
     return FALSE;
@@ -327,7 +373,7 @@ function em_write_exportables($module, $exportables) {
         $module_exports = em_get_module_exports($module, $table);
         $extra = array();
         foreach ($objects as $name => $object) {
-          if (!in_array($name, $dump[$table])) {
+          if (!isset($exportables[$table][$name])) {
             $extra[] = $name;
           }
         }
@@ -406,12 +452,11 @@ function em_list() {
 }
 
 /**
- * TODO: Refactor.
+ * Get all exportables from module.
  */
 function em_get_module_exports_all($module) {
-  $exports = em_export();
   $all_exportables = array();
-  foreach ($exports as $table => $export) {
+  foreach (array_keys(em_export()) as $table) {
     $exportables = em_get_module_exports($module, $table);
     if ($exportables) {
       $all_exportables[$table] = $exportables;
