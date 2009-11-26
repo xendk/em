@@ -6,9 +6,6 @@ list hvilke der er overridden
 
 em revert: * funker. Kunne have bedre argumenter (patterns?)
 * understøttelse af flere typer
-slet overrideen
-ikke så ligetil.. De forskellige exportables har forskellige måder at slette
-på, og der er ikke noget generelt callback. Vi må have en liste.
 
 em dump: funker, kunne have bedre argumenter
 exporter navngivne til fil, bevar eksisterende (for så vidt muligt)
@@ -16,7 +13,7 @@ exporter navngivne til fil, bevar eksisterende (for så vidt muligt)
 em del:
 slet given export
 
-em update:
+em update: virker.
 reexport alle overridden
 
 em list: virker. bedre listing?
@@ -108,6 +105,8 @@ function em_export($table = NULL, $key = NULL) {
           'default hook' => $schema['export']['default hook'],
           'list callback' => $schema['export']['list callback'],
           'to hook code callback' => $schema['export']['to hook code callback'],
+          'load callback' => 'ctools_export_load_object',
+          'load arguments' => array($etable, 'names'),
         );
         if ($defaults[$etable]) {
           $export_types[$etable] += $defaults[$etable];
@@ -146,7 +145,7 @@ function em_status() {
 
   foreach ($export_schemas as $table => $export) {
     $site_exports = array();
-    $module_exports = em_get_module_exports2($module, $export);
+    $module_exports = em_get_module_exports($module, $table);
     if (sizeof($module_exports)) {
       // Now load the same objects from the site.
       $site_exports = em_get_site_exportables($table, $module_exports);
@@ -179,7 +178,7 @@ function em_revert() {
   // Find resettables
   $exports = em_export();
   foreach ($exports as $table => $export) {
-    $module_exports = em_get_module_exports2($module, $export);
+    $module_exports = em_get_module_exports($module, $table);
     $site_exports = em_get_site_exportables($table, $module_exports);
     foreach ($site_exports as $name => $object) {
       if ($object->export_type & EXPORT_IN_DATABASE) {
@@ -205,19 +204,24 @@ function em_revert() {
     }
   }
 
-  // TODO: split out into function, so other functions can use it.
-  foreach ($reset as $table => $objects) {
+  drush_op('em_revert_exportables', $reset);
+  drush_print(dt('Done.'));
+}
+
+function em_revert_exportables($exportables) {
+  $return = TRUE;
+  foreach ($exportables as $table => $objects) {
     foreach ($objects as $name => $object) {
-      // TODO: em_export should handle this.
       if ($exports[$table]['delete hook']) {
         $exports[$table]['delete hook']($object);
       } else {
         drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
+        $return = FALSE;
       }
       drush_print(dt('Reverted @name.', array('@name' => $name)));
     }
   }
-  drush_print(dt('Done.'));
+  return $return;
 }
 
 
@@ -259,8 +263,7 @@ function em_dump() {
 
   // Now, add in the existing ones.
   foreach ($reexport as $table => $entries) {
-    $export = em_export($table);
-    $module_exports = em_get_module_exports2($module, $export);
+    $module_exports = em_get_module_exports($module, $table);
     // Override or add.
     $module_exports = array_merge($module_exports,
                                   em_get_site_exportables($table, $entries));
@@ -268,8 +271,9 @@ function em_dump() {
   }
 
   em_write_exportables($module, $reexport);
-  
-  // TODO: Revert the exports.
+
+  drush_op('em_revert_exportables', $reexport);
+
   drush_print('Done.');
 }
 
@@ -292,7 +296,8 @@ function em_update() {
 
   // Write files.
   em_write_exportables($module, $module_exports);
-  // TODO: Revert the exports.
+
+  drush_op('em_revert_exportables', $module_exports);
 }
 
 function em_write_exportables($module, $exportables) {
@@ -319,7 +324,7 @@ function em_write_exportables($module, $exportables) {
         // OK.
         // Get the module's list of objects
         // check that there's not anyone of those that's not in the set we're exporting
-        $module_exports = em_get_module_exports2($module);
+        $module_exports = em_get_module_exports($module, $table);
         $extra = array();
         foreach ($objects as $name => $object) {
           if (!in_array($name, $dump[$table])) {
@@ -385,11 +390,10 @@ function em_write($filename, $content) {
  */
 function em_list() {
   // Find out what exportables that's available.
-  $export_schemas = em_export();
-
-  foreach ($export_schemas as $table => $export) {
+  foreach (array_keys(em_export()) as $table) {
     $site_exports = em_get_site_exportables($table);
     foreach ($site_exports as $name => $export) {
+      // TODO: roll into em_export
       if ($export->export_type == EXPORT_IN_DATABASE) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
       }
@@ -405,23 +409,24 @@ function em_list() {
  * TODO: Refactor.
  */
 function em_get_module_exports_all($module) {
-  $schemas = em_export();
+  $exports = em_export();
   $all_exportables = array();
-  foreach ($schemas as $table => $export) {
-    $exports = em_get_module_exports($module, $export);
-    if ($exports) {
-      $all_exportables[$table] = $exports;
+  foreach ($exports as $table => $export) {
+    $exportables = em_get_module_exports($module, $table);
+    if ($exportables) {
+      $all_exportables[$table] = $exportables;
     }
   }
   return $all_exportables;
 }
 
 /**
- * TODO: Will replace em_get_module_exports.
+ * Get module defined exportables.
  */
-function em_get_module_exports2($module, $export) {
+function em_get_module_exports($module, $table) {
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
+  $export = em_export($table);
   $old = getcwd();
   chdir(drush_cwd());
   $hook_file = $module . '.' . $export['api'] . '.inc';
@@ -437,35 +442,16 @@ function em_get_module_exports2($module, $export) {
 }
 
 /**
- * TODO: To be replaced by em_get_module_exports2.
- */
-function em_get_module_exports($module, $export) {
-  // Apparently drush thinks we're in the modules directory, while we're in
-  // fact in the site root. Odd.
-  $old = getcwd();
-  chdir(drush_cwd());
-  $hook_file = $module . '.' . $export['api']['api'] . '.inc';
-  if (file_exists($hook_file)) {
-    require_once($hook_file);
-    $hook = $module . "_" . $export['default hook'];
-    if (function_exists($hook)) {
-      $module_exports = $hook();
-    }
-  }
-  chdir($old);
-  return $module_exports;
-}
-
-/**
- * TODO: Refactor.
+ * Returns exportables from database.
  */
 function em_get_site_exportables($table, $exportables = NULL) {
   $export = em_export($table);
   if (is_null($exportables) and function_exists($export['list callback'])) {
     $exportables = $export['list callback']();
   }
-  // TODO: refactor this into em_export
-  $site_exports = ctools_export_load_object($table, 'names', array_keys($exportables));
+  $args = $export['load arguments'];
+  $args[] = array_keys($exportables);
+  $site_exports = call_user_func_array($export['load callback'], $args);
   return $site_exports;  
 }
 
