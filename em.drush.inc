@@ -217,6 +217,7 @@ function em_revert() {
 
 function em_revert_exportables($exportables) {
   $return = TRUE;
+  $exports = em_export();
   foreach ($exportables as $table => $objects) {
     foreach ($objects as $name => $object) {
       if ($exports[$table]['delete hook']) {
