@@ -97,6 +97,17 @@ function em_export($table = NULL, $key = NULL) {
   if (!$export_types) {
     // TODO: predefined non-ctools types.
     $export_types = array();
+    if (module_exists('views')) {
+      views_include('view');
+      $export_types['views'] = array(
+        'api' => 'views_default',
+        'identifier' => 'view',
+        'key' => 'name',
+        'list callback' => 'views_get_all_views',
+        'default hook' => 'views_default_views',
+        'load callback' => 'em_get_views',
+      );
+    }
 
     // Find out what ctools exportables that's available.
     ctools_include('export');
@@ -127,6 +138,7 @@ function em_export($table = NULL, $key = NULL) {
   } elseif ($table) {
     return $export_types[$table];
   }
+  drush_print_r($export_types);
   return $export_types;
 }
 
@@ -139,6 +151,18 @@ function em_delete_page_manager_pages($object) {
   }
   page_manager_page_delete($object);
   return;
+}
+
+/**
+ * Helper function to load multiple views.
+ */
+function em_get_views($names) {
+  $res = array();
+  foreach ($names as $name) {
+    $view = views_get_view($name);
+    $res[$view->name] = $view;
+  }
+  return $res;
 }
 
 
@@ -157,7 +181,11 @@ function em_status() {
       // Now load the same objects from the site.
       $site_exports = em_get_site_exportables($table, $module_exports);
       foreach ($site_exports as $name => $export) {
-        $output[$table] .= "  " . $name . ': ' . ($export->export_type == EXPORT_IN_CODE ? 'Normal' : 'Overridden') . "\n";
+        // TODO: Generalise normal/overridden detection.
+        $output[$table] .= "  " . $name . ': ' .
+          ($export instanceof view ?
+           ($export->type == t('Overridden') ? 'Overridden' : 'Normal') :
+           ($export->export_type == EXPORT_IN_CODE ? 'Normal' : 'Overridden')) . "\n";
       }
     }
   }
@@ -473,9 +501,9 @@ function em_get_module_exports($module, $table) {
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
   $export = em_export($table);
-  $old = getcwd();
-  chdir(drush_cwd());
-  $hook_file = $module . '.' . $export['api'] . '.inc';
+  //$old = getcwd();
+  //chdir(drush_cwd());
+  $hook_file = drush_cwd() . "/" . $module . '.' . $export['api'] . '.inc';
   if (file_exists($hook_file)) {
     require_once($hook_file);
     $hook = $module . "_" . $export['default hook'];
@@ -483,7 +511,7 @@ function em_get_module_exports($module, $table) {
       $module_exports = $hook();
     }
   }
-  chdir($old);
+  //chdir($old);
   return $module_exports;  
 }
 
