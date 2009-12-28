@@ -138,7 +138,6 @@ function em_export($table = NULL, $key = NULL) {
   } elseif ($table) {
     return $export_types[$table];
   }
-  drush_print_r($export_types);
   return $export_types;
 }
 
