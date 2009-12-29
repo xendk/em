@@ -106,7 +106,10 @@ function em_export($table = NULL, $key = NULL) {
         'list callback' => 'views_get_all_views',
         'default hook' => 'views_default_views',
         'load callback' => 'em_get_views',
+        // TODO: views_view_exportables might be more right.
         'export callback' => 'em_export_view',
+        'overridden callback' => 'em_view_overridden',
+        'delete hook' => 'em_view_revert',
       );
     }
 
@@ -126,6 +129,7 @@ function em_export($table = NULL, $key = NULL) {
           'to hook code callback' => $schema['export']['to hook code callback'],
           'load callback' => 'ctools_export_load_object',
           'load arguments' => array($etable, 'names'),
+          'overridden callback' => 'em_ctools_overridden',
         );
         if ($defaults[$etable]) {
           $export_types[$etable] += $defaults[$etable];
@@ -172,6 +176,28 @@ function em_export_view($view, $indent) {
   return $view->export($indent);
 }
 
+/**
+ * Helper function to check if a view is overridden.
+ */
+function em_view_overridden($export) {
+  return $export->type == t('Overridden');
+}
+
+/**
+ * Helper function to check if a ctools exportable is overridden.
+ */
+function em_ctools_overridden($export) {
+  return $export->export_type != EXPORT_IN_CODE;
+}
+
+/**
+ * Helper function to revert view.
+ */
+function em_view_revert($view) {
+  if ($view->type == t('Overridden')) {
+    $view->delete();
+  }
+}
 
 
 function em_status() {
@@ -189,11 +215,9 @@ function em_status() {
       // Now load the same objects from the site.
       $site_exports = em_get_site_exportables($table, $module_exports);
       foreach ($site_exports as $name => $export) {
-        // TODO: Generalise normal/overridden detection.
+        $func = em_export($table, 'overridden callback');
         $output[$table] .= "  " . $name . ': ' .
-          ($export instanceof view ?
-           ($export->type == t('Overridden') ? 'Overridden' : 'Normal') :
-           ($export->export_type == EXPORT_IN_CODE ? 'Normal' : 'Overridden')) . "\n";
+           ($func($export) ? 'Overridden' : 'Normal') . "\n";
       }
     }
   }
@@ -223,8 +247,9 @@ function em_revert() {
   foreach ($exports as $table => $export) {
     $module_exports = em_get_module_exports($module, $table);
     $site_exports = em_get_site_exportables($table, $module_exports);
+    $func = $export['overridden callback'];
     foreach ($site_exports as $name => $object) {
-      if ($object->export_type & EXPORT_IN_DATABASE) {
+      if ($func($object)) {
         $resetables[$table][$name] = $object;
       }
     }
@@ -258,11 +283,11 @@ function em_revert_exportables($exportables) {
     foreach ($objects as $name => $object) {
       if ($exports[$table]['delete hook']) {
         $exports[$table]['delete hook']($object);
+        drush_print(dt('Reverted @name.', array('@name' => $name)));
       } else {
         drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
         $return = FALSE;
       }
-      drush_print(dt('Reverted @name.', array('@name' => $name)));
     }
   }
   return $return;
@@ -476,9 +501,8 @@ function em_list() {
   foreach (array_keys(em_export()) as $table) {
     $site_exports = em_get_site_exportables($table);
     foreach ($site_exports as $name => $export) {
-      // TODO: roll into em_export
-      // TODO: views support
-      if ($export->export_type == EXPORT_IN_DATABASE) {
+      $func = em_export($table, 'overridden callback');
+      if ($func($export)) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
       }
     }
