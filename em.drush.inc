@@ -84,13 +84,13 @@ function em_export($table = NULL, $key = NULL) {
   static $defaults = array(
     'page_manager_pages' => array(
       'pre export' => 'page_manager_get_tasks',
-      'delete hook' => 'em_delete_page_manager_pages',
+      'delete callback' => 'em_delete_page_manager_pages',
     ),
     'page_manager_handlers' => array(
-      'delete hook' => 'page_manager_delete_task_handler',
+      'delete callback' => 'page_manager_delete_task_handler',
     ),
     'panels_mini' => array(
-      'delete hook' => 'panels_mini_delete',
+      'delete callback' => 'panels_mini_delete',
     ),
   );
 
@@ -109,7 +109,7 @@ function em_export($table = NULL, $key = NULL) {
         // TODO: views_view_exportables might be more right.
         'export callback' => 'em_export_view',
         'overridden callback' => 'em_view_overridden',
-        'delete hook' => 'em_view_revert',
+        'delete callback' => 'em_view_delete',
       );
     }
 
@@ -191,12 +191,10 @@ function em_ctools_overridden($export) {
 }
 
 /**
- * Helper function to revert view.
+ * Helper function to delete view.
  */
-function em_view_revert($view) {
-  if ($view->type == t('Overridden')) {
-    $view->delete();
-  }
+function em_view_delete($view) {
+  $view->delete();
 }
 
 
@@ -281,8 +279,8 @@ function em_revert_exportables($exportables) {
   $exports = em_export();
   foreach ($exportables as $table => $objects) {
     foreach ($objects as $name => $object) {
-      if ($exports[$table]['delete hook']) {
-        $exports[$table]['delete hook']($object);
+      if ($exports[$table]['delete callback']) {
+        $exports[$table]['delete callback']($object);
         drush_print(dt('Reverted @name.', array('@name' => $name)));
       } else {
         drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
