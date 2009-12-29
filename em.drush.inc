@@ -106,6 +106,7 @@ function em_export($table = NULL, $key = NULL) {
         'list callback' => 'views_get_all_views',
         'default hook' => 'views_default_views',
         'load callback' => 'em_get_views',
+        'export callback' => 'em_export_view',
       );
     }
 
@@ -163,6 +164,14 @@ function em_get_views($names) {
   }
   return $res;
 }
+
+/**
+ * Helper function to export a view.
+ */
+function em_export_view($view, $indent) {
+  return $view->export($indent);
+}
+
 
 
 function em_status() {
@@ -442,7 +451,7 @@ function em_write_exportables($module, $exportables) {
     $file_code .= "// \$Id" . ": $\n\n";
     $file_code .= "/**\n";
     $file_code .= " * @file\n";
-    $file_code .= " * Bulk export of $api objects exported by Drush ce.\n";
+    $file_code .= " * Bulk export of $api objects exported by Drush em.\n";
     $file_code .= " */\n\n";
     $file_code .= $hook_code;
     em_write($module . '.' . $api . '.inc', $file_code);
@@ -468,6 +477,7 @@ function em_list() {
     $site_exports = em_get_site_exportables($table);
     foreach ($site_exports as $name => $export) {
       // TODO: roll into em_export
+      // TODO: views support
       if ($export->export_type == EXPORT_IN_DATABASE) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
       }
