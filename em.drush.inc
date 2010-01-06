@@ -393,16 +393,18 @@ function em_update() {
   foreach ($module_exports as $table => $exports) {
     $site_exports = em_get_site_exportables($table, $exports);
     foreach ($site_exports as $name => $object) {
-      // TODO: hook(?) for non-ctools tables
-      if (!($object->export_type ^ EXPORT_IN_DATABASE)) {
-        unset($module_exports[$table][$name]);
+      $func = em_export($table, 'overridden callback');
+      if ($func($object)) {
+        // Replace module by sites.
+        $module_exports[$table][$name] = $object;
       }
     }
   }
 
   // Write files.
   em_write_exportables($module, $module_exports);
-
+  drush_print('Updated files');
+  
   drush_op('em_revert_exportables', $module_exports);
 }
 
