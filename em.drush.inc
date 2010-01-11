@@ -108,7 +108,7 @@ function em_export($table = NULL, $key = NULL) {
         'load callback' => 'em_get_views',
         // TODO: views_view_exportables might be more right.
         'export callback' => 'em_export_view',
-        'overridden callback' => 'em_view_overridden',
+        'in code callback' => 'em_view_in_code',
         'delete callback' => 'em_view_delete',
       );
     }
@@ -129,7 +129,7 @@ function em_export($table = NULL, $key = NULL) {
           'to hook code callback' => $schema['export']['to hook code callback'],
           'load callback' => 'ctools_export_load_object',
           'load arguments' => array($etable, 'names'),
-          'overridden callback' => 'em_ctools_overridden',
+          'in code callback' => 'em_ctools_in_code',
         );
         if ($defaults[$etable]) {
           $export_types[$etable] += $defaults[$etable];
@@ -177,16 +177,16 @@ function em_export_view($view, $indent) {
 }
 
 /**
- * Helper function to check if a view is overridden.
+ * Helper function to check if a view not defined in code.
  */
-function em_view_overridden($export) {
-  return $export->type == t('Overridden');
+function em_view_in_code($export) {
+  return ($export->type == t('Overridden') or $export->type == t('Normal'));
 }
 
 /**
- * Helper function to check if a ctools exportable is overridden.
+ * Helper function to check if a ctools exportable is not defined in code.
  */
-function em_ctools_overridden($export) {
+function em_ctools_in_code($export) {
   return $export->export_type != EXPORT_IN_CODE;
 }
 
@@ -213,7 +213,7 @@ function em_status() {
       // Now load the same objects from the site.
       $site_exports = em_get_site_exportables($table, $module_exports);
       foreach ($site_exports as $name => $export) {
-        $func = em_export($table, 'overridden callback');
+        $func = em_export($table, 'in code callback');
         $output[$table] .= "  " . $name . ': ' .
            ($func($export) ? 'Overridden' : 'Normal') . "\n";
       }
@@ -245,7 +245,7 @@ function em_revert() {
   foreach ($exports as $table => $export) {
     $module_exports = em_get_module_exports($module, $table);
     $site_exports = em_get_site_exportables($table, $module_exports);
-    $func = $export['overridden callback'];
+    $func = $export['in code callback'];
     foreach ($site_exports as $name => $object) {
       if ($func($object)) {
         $resetables[$table][$name] = $object;
@@ -393,7 +393,7 @@ function em_update() {
   foreach ($module_exports as $table => $exports) {
     $site_exports = em_get_site_exportables($table, $exports);
     foreach ($site_exports as $name => $object) {
-      $func = em_export($table, 'overridden callback');
+      $func = em_export($table, 'in code callback');
       if ($func($object)) {
         // Replace module by sites.
         $module_exports[$table][$name] = $object;
@@ -501,7 +501,7 @@ function em_list() {
   foreach (array_keys(em_export()) as $table) {
     $site_exports = em_get_site_exportables($table);
     foreach ($site_exports as $name => $export) {
-      $func = em_export($table, 'overridden callback');
+      $func = em_export($table, 'in code callback');
       if ($func($export)) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
       }
