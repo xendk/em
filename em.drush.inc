@@ -333,10 +333,10 @@ function em_dump() {
     $module_exports = em_get_module_exports($module, $table);
     // Override or add.
     $module_exports = array_merge($module_exports,
-                                  em_get_site_exportables($table, $entries));
+                                  em_get_site_exportables($table, $entries));        
     $reexport[$table] = $module_exports;
   }
-
+  
   em_write_exportables($module, $reexport);
 
   drush_op('em_revert_exportables', $reexport);
@@ -531,6 +531,7 @@ function em_get_module_exports_all($module) {
  * Get module defined exportables.
  */
 function em_get_module_exports($module, $table) {
+  $module_exports = array();
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
   $export = em_export($table);
