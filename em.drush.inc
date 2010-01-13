@@ -113,6 +113,22 @@ function em_export($table = NULL, $key = NULL) {
       );
     }
 
+    if (module_exists('field_gatekeeper')) {
+      $export_types['field_gatekeeper'] = array(
+        'api' => 'field_gatekeeper',
+        'identifier' => 'field',
+        'key' => 'field_name',
+        'list callback' => 'em_fg_get_all_gateways',
+        'default hook' => 'field_gatekeeper',
+        'load callback' => 'em_fg_load_gateways',
+        //'export callback' => '',
+        'to hook code callback' => 'em_fg_to_hook_code',
+        'in code callback' => 'em_fg_gateway_in_code',
+        'delete callback' => '',
+        'is array' => TRUE,
+      );
+    }
+
     // Find out what ctools exportables that's available.
     ctools_include('export');
     $schemas = ctools_export_get_schemas(TRUE);
@@ -156,6 +172,73 @@ function em_delete_page_manager_pages($object) {
   page_manager_page_delete($object);
   return;
 }
+
+function em_fg_get_all_gateways() {
+  module_load_include('inc', 'content', '/includes/content.crud');
+  $fields = array();
+  $all_fields = content_field_instance_read(NULL, TRUE);
+  foreach ($all_fields as $field) {
+    $fields[$field['field_name']] = field_gatekeeper_base_clean($field);
+  }
+  return $fields;
+}
+
+function em_fg_load_gateways($names) {
+  $all_fields = em_fg_get_all_gateways();
+  $fields = array();
+  foreach ($names as $name) {
+    if ($all_fields[$name]) {
+      $fields[$name] = $all_fields[$name];
+    }
+  }
+  return $fields;
+}
+
+function em_fg_gateway_in_code($field) {
+  module_load_include('inc', 'content', '/includes/content.crud');
+  // load all instances of the field
+  $options = array('field_name' => $field['field_name']);
+  $instances = content_field_instance_read($options);
+  foreach ($instances as $instance) {
+    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
+    if ($diffs) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+function em_fg_to_hook_code($objects, $module) {
+  $export = em_export('field_gatekeeper');
+  $output = "/**\n";
+  $output .= " * Implementation of hook_{$export['default hook']}()\n";
+  $output .= " */\n";
+  $output .= "function " . $module . "_{$export['default hook']}() {\n";
+  foreach ($objects as $name) {
+    module_load_include('inc', 'content', '/includes/content.crud');
+    $instances = content_field_instance_read(array('field_name' => $name));
+    $instance = $instances[0];
+    $instance['locked'] = 1;
+    
+    $instance = field_gatekeeper_base_clean($instance);
+    $dump = "\${$export['identifier']} = ";
+    $dump .= var_export($instance, TRUE);
+    $dump .= ";\n";
+    // indent the exported data to make it more readable
+    $dump = preg_replace('/^/m', '  ', $dump);
+
+    // clean up the dump a bit by removing unwanted white space
+    $dump = preg_replace('/array\s+\(/', 'array(', $dump);
+    $dump = preg_replace('/=>\s+array\(/', '=> array(', $dump);
+    $output .= $dump;
+    
+    $output .= "  \${$export['identifier']}s['" . check_plain($instance['field_name']) . "'] = \${$export['identifier']};\n\n";
+  }
+  $output .= " return \${$export['identifier']}s;\n";
+  $output .= "}\n";
+  return $output;
+}
+
 
 /**
  * Helper function to load multiple views.
@@ -280,7 +363,8 @@ function em_revert_exportables($exportables) {
   foreach ($exportables as $table => $objects) {
     foreach ($objects as $name => $object) {
       if ($exports[$table]['delete callback']) {
-        $exports[$table]['delete callback']($object);
+        drush_op($exports[$table]['delete callback'], $object);
+        // $exports[$table]['delete callback']($object);
         drush_print(dt('Reverted @name.', array('@name' => $name)));
       } else {
         drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
