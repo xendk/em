@@ -23,11 +23,18 @@ em diff:
 vis forskelle (hvis det er muligt)
 
  */
+
+define('EM_STATUS_IN_CODE', 0x01);
+define('EM_STATUS_IN_DATABASE', 0x02);
+
 function em_drush_command() {
   $items['em status'] = array(
     // We're skipping the customary drush_ prefix, as it increases the chance
     // of colliding with a hook.
     'callback' => 'em_status',
+    'options' => array(
+      '-o' => 'Only show overridden.',
+    ),
     // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
   );
 
@@ -108,7 +115,7 @@ function em_export($table = NULL, $key = NULL) {
         'load callback' => 'em_get_views',
         // TODO: views_view_exportables might be more right.
         'export callback' => 'em_export_view',
-        'in code callback' => 'em_view_in_code',
+        'status callback' => 'em_view_status',
         'delete callback' => 'em_view_delete',
       );
     }
@@ -123,7 +130,7 @@ function em_export($table = NULL, $key = NULL) {
         'load callback' => 'em_fg_load_gateways',
         //'export callback' => '',
         'to hook code callback' => 'em_fg_to_hook_code',
-        'in code callback' => 'em_fg_gateway_in_code',
+        'status callback' => 'em_fg_gateway_status',
         'delete callback' => '',
         'is array' => TRUE,
       );
@@ -145,7 +152,7 @@ function em_export($table = NULL, $key = NULL) {
           'to hook code callback' => $schema['export']['to hook code callback'],
           'load callback' => 'ctools_export_load_object',
           'load arguments' => array($etable, 'names'),
-          'in code callback' => 'em_ctools_in_code',
+          'status callback' => 'em_ctools_status',
         );
         if ($defaults[$etable]) {
           $export_types[$etable] += $defaults[$etable];
@@ -176,9 +183,15 @@ function em_delete_page_manager_pages($object) {
 function em_fg_get_all_gateways() {
   module_load_include('inc', 'content', '/includes/content.crud');
   $fields = array();
+  // Load fields in DB from CCK.
   $all_fields = content_field_instance_read(NULL, TRUE);
   foreach ($all_fields as $field) {
     $fields[$field['field_name']] = field_gatekeeper_base_clean($field);
+  }
+  // Overlay module defined.
+  $gw_fields = field_gatekeeper_get_field_gatekeeper();
+  foreach ($gw_fields as $field) {
+    $fields[$field['field_name']] = field_gatekeeper_base_clean($field);    
   }
   return $fields;
 }
@@ -207,6 +220,21 @@ function em_fg_gateway_in_code($field) {
   }
   return TRUE;
 }
+
+function em_fg_gateway_status($field) {
+  module_load_include('inc', 'content', '/includes/content.crud');
+  // load all instances of the field
+  $options = array('field_name' => $field['field_name']);
+  $instances = content_field_instance_read($options);
+  foreach ($instances as $instance) {
+    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
+    if ($diffs) {
+      return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
+    }
+  }
+  return EM_STATUS_IN_CODE;
+}
+
 
 function em_fg_to_hook_code($objects, $module) {
   $export = em_export('field_gatekeeper');
@@ -259,19 +287,28 @@ function em_export_view($view, $indent) {
   return $view->export($indent);
 }
 
-/**
- * Helper function to check if a view not defined in code.
- */
-function em_view_in_code($export) {
-  return ($export->type == t('Overridden') or $export->type == t('Normal'));
+
+function em_view_status($export) {
+  if ($export->type == t('Overridden')) {
+    return EM_STATUS_IN_DATABASE & EM_STATUS_IN_CODE;
+  } elseif ($export->type == t('Standard')) {
+    return EM_STATUS_IN_CODE;
+  }
+  // t('Normal')
+  return EM_STATUS_IN_DATABASE;
 }
 
-/**
- * Helper function to check if a ctools exportable is not defined in code.
- */
-function em_ctools_in_code($export) {
-  return $export->export_type != EXPORT_IN_CODE;
+function em_ctools_status($export) {
+  $status = 0;
+  if ($export->export_type == EXPORT_IN_CODE) {
+    $status = EM_STATUS_IN_CODE;
+  }
+  if ($export->export_type == EXPORT_IN_DATABASE) {
+    $status = $status & EM_STATUS_IN_DATABASE;
+  }
+  return $status;
 }
+
 
 /**
  * Helper function to delete view.
@@ -288,7 +325,8 @@ function em_status() {
 
   // Now, find out what exportables that's available.
   $export_schemas = em_export();
-
+  $quick = drush_get_option('o', FALSE);
+  drush_print($quick ? 'true' : 'false');
   foreach ($export_schemas as $table => $export) {
     $site_exports = array();
     $module_exports = em_get_module_exports($module, $table);
@@ -296,9 +334,13 @@ function em_status() {
       // Now load the same objects from the site.
       $site_exports = em_get_site_exportables($table, $module_exports);
       foreach ($site_exports as $name => $export) {
-        $func = em_export($table, 'in code callback');
-        $output[$table] .= "  " . $name . ': ' .
-           ($func($export) ? 'Overridden' : 'Normal') . "\n";
+        $func = em_export($table, 'status callback');
+        $overridden = $func($export) & EM_STATUS_IN_DATABASE;
+        if ($overridden or !$quick) {
+          $output[$table] .= "  " . $name . ': ' .
+            ($overridden ? 'Overridden' : 'Normal') .
+            "\n";
+        }
       }
     }
   }
@@ -328,9 +370,9 @@ function em_revert() {
   foreach ($exports as $table => $export) {
     $module_exports = em_get_module_exports($module, $table);
     $site_exports = em_get_site_exportables($table, $module_exports);
-    $func = $export['in code callback'];
+    $func = $export['status callback'];
     foreach ($site_exports as $name => $object) {
-      if ($func($object)) {
+      if ($func($object) & EM_STATUS_IN_DATABASE) {
         $resetables[$table][$name] = $object;
       }
     }
@@ -477,8 +519,8 @@ function em_update() {
   foreach ($module_exports as $table => $exports) {
     $site_exports = em_get_site_exportables($table, $exports);
     foreach ($site_exports as $name => $object) {
-      $func = em_export($table, 'in code callback');
-      if ($func($object)) {
+      $func = em_export($table, 'status callback');
+      if ($func($object) & EM_STATUS_IN_DATABASE) {
         // Replace module by sites.
         $module_exports[$table][$name] = $object;
       }
@@ -585,8 +627,8 @@ function em_list() {
   foreach (array_keys(em_export()) as $table) {
     $site_exports = em_get_site_exportables($table);
     foreach ($site_exports as $name => $export) {
-      $func = em_export($table, 'in code callback');
-      if ($func($export)) {
+      $func = em_export($table, 'status callback');
+      if ($func($export) == EM_STATUS_IN_DATABASE) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
       }
     }
