@@ -125,12 +125,26 @@ function em_export($table = NULL, $key = NULL) {
         'api' => 'field_gatekeeper',
         'identifier' => 'field',
         'key' => 'field_name',
-        'list callback' => 'em_fg_get_all_gateways',
+        'list callback' => 'em_fg_get_all_gatekeeper',
         'default hook' => 'field_gatekeeper',
-        'load callback' => 'em_fg_load_gateways',
+        'load callback' => 'em_fg_load_gatekeeper',
         //'export callback' => '',
-        'to hook code callback' => 'em_fg_to_hook_code',
-        'status callback' => 'em_fg_gateway_status',
+        'to hook code callback' => 'em_fg_gatekeeper_to_hook_code',
+        'status callback' => 'em_fg_gatekeeper_status',
+        'delete callback' => '',
+        'is array' => TRUE,
+      );
+      
+      $export_types['field_instances'] = array(
+        'api' => 'field_instances',
+        'identifier' => 'field',
+        'key' => 'name',
+        'list callback' => 'em_fg_get_all_instances',
+        'default hook' => 'field_instances',
+        'load callback' => 'em_fg_load_instances',
+        //'export callback' => '',
+        'to hook code callback' => 'em_fg_instances_to_hook_code',
+        'status callback' => 'em_fg_instance_status',
         'delete callback' => '',
         'is array' => TRUE,
       );
@@ -180,7 +194,7 @@ function em_delete_page_manager_pages($object) {
   return;
 }
 
-function em_fg_get_all_gateways() {
+function em_fg_get_all_gatekeeper() {
   module_load_include('inc', 'content', '/includes/content.crud');
   $fields = array();
   // Load fields in DB from CCK.
@@ -196,8 +210,26 @@ function em_fg_get_all_gateways() {
   return $fields;
 }
 
-function em_fg_load_gateways($names) {
-  $all_fields = em_fg_get_all_gateways();
+function em_fg_get_all_instances() {
+  module_load_include('inc', 'content', '/includes/content.crud');
+  $fields = array();
+  // Load fields in DB from CCK.
+  $all_fields = content_field_instance_read(NULL, TRUE);
+  foreach ($all_fields as $field) {
+    $field = field_gatekeeper_instance_clean($field);
+    $field['name'] = $field['type_name'] . '-' . $field['field_name'];
+    $fields[$field['name']] = $field;
+  }
+  // Overlay module defined.
+  $gw_fields = field_gatekeeper_get_field_instances();
+  foreach ($gw_fields as $field) {
+    $fields[$field['name']] = field_gatekeeper_instance_clean($field);    
+  }
+  return $fields;
+}
+
+function em_fg_load_gatekeeper($names) {
+  $all_fields = em_fg_get_all_gatekeeper();
   $fields = array();
   foreach ($names as $name) {
     if ($all_fields[$name]) {
@@ -207,21 +239,18 @@ function em_fg_load_gateways($names) {
   return $fields;
 }
 
-function em_fg_gateway_in_code($field) {
-  module_load_include('inc', 'content', '/includes/content.crud');
-  // load all instances of the field
-  $options = array('field_name' => $field['field_name']);
-  $instances = content_field_instance_read($options);
-  foreach ($instances as $instance) {
-    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
-    if ($diffs) {
-      return FALSE;
+function em_fg_load_instances($names) {
+  $all_fields = em_fg_get_all_instances();
+  $fields = array();
+  foreach ($names as $name) {
+    if ($all_fields[$name]) {
+      $fields[$name] = $all_fields[$name];
     }
   }
-  return TRUE;
+  return $fields;
 }
 
-function em_fg_gateway_status($field) {
+function em_fg_gatekeeper_status($field) {
   module_load_include('inc', 'content', '/includes/content.crud');
   // load all instances of the field
   $options = array('field_name' => $field['field_name']);
@@ -235,11 +264,28 @@ function em_fg_gateway_status($field) {
   return EM_STATUS_IN_CODE;
 }
 
+function em_fg_instance_status($field) {
+  module_load_include('inc', 'content', '/includes/content.crud');
+  // load all instances of the field
+  $options = array('field_name' => $field['field_name'], 'type_name' => $field['type_name']);
+  $instances = content_field_instance_read($options);
+  if (!$instances) {
+    return EM_STATUS_IN_CODE;
+  }
+  foreach ($instances as $instance) {
+    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_instance_clean($instance));
+    if ($diffs) {
+      return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
+    }
+  }
+  return EM_STATUS_IN_DATABASE;
+}
 
-function em_fg_to_hook_code($objects, $module) {
+
+function em_fg_gatekeeper_to_hook_code($objects, $module) {
   $export = em_export('field_gatekeeper');
   $output = "/**\n";
-  $output .= " * Implementation of hook_{$export['default hook']}()\n";
+  $output .= " * Implementation of hook_{$export['default hook']}().\n";
   $output .= " */\n";
   $output .= "function " . $module . "_{$export['default hook']}() {\n";
   foreach ($objects as $name) {
@@ -326,7 +372,6 @@ function em_status() {
   // Now, find out what exportables that's available.
   $export_schemas = em_export();
   $quick = drush_get_option('o', FALSE);
-  drush_print($quick ? 'true' : 'false');
   foreach ($export_schemas as $table => $export) {
     $site_exports = array();
     $module_exports = em_get_module_exports($module, $table);
@@ -577,7 +622,7 @@ function em_write_exportables($module, $exportables) {
         $code[$api] .= $output;
       } else {
         $output = "/**\n";
-        $output .= " * Implementation of hook_{$export['default hook']}()\n";
+        $output .= " * Implementation of hook_{$export['default hook']}().\n";
         $output .= " */\n";
         $output .= "function " . $module . "_{$export['default hook']}() {\n";
         foreach ($objects as $object) {
