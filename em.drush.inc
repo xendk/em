@@ -346,11 +346,11 @@ function em_view_status($export) {
 
 function em_ctools_status($export) {
   $status = 0;
-  if ($export->export_type == EXPORT_IN_CODE) {
+  if ($export->export_type & EXPORT_IN_CODE) {
     $status = EM_STATUS_IN_CODE;
   }
-  if ($export->export_type == EXPORT_IN_DATABASE) {
-    $status = $status & EM_STATUS_IN_DATABASE;
+  if ($export->export_type & EXPORT_IN_DATABASE) {
+    $status = $status | EM_STATUS_IN_DATABASE;
   }
   return $status;
 }
@@ -484,7 +484,7 @@ function em_dump() {
 
   $reexport = array();
   foreach ($dump as $table => $entries) {
-    if (em_export($table)) {
+    if ($export = em_export($table)) {
       $site_exportables = em_get_site_exportables($table);
       foreach ($entries as $entry) {
         if (!$site_exportables[$entry]) {
@@ -492,6 +492,16 @@ function em_dump() {
                                     array('@type' => $table, '@entry' => $entry)));
         } else {
           $reexport[$table][$entry] = $entry;
+        }
+      }
+      // Take API into account. hook_default_page_manager_handlers and
+      // hook_default_page_manager_pages uses the same file.
+      $all_exportables = em_export();
+      foreach ($all_exportables as $other_table => $other_export) {
+        if ($export['api'] == $other_export['api'] and !$dump[$other_table]) {
+          // Add in other exportables that uses the same API.  We just set it
+          // to an empty array, as we add in existing exportables later.
+          $reexport[$other_table] = array();
         }
       }
     } else {
