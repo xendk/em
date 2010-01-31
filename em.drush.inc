@@ -266,7 +266,7 @@ function em_fg_gatekeeper_status($field) {
 
 function em_fg_instance_status($field) {
   module_load_include('inc', 'content', '/includes/content.crud');
-  // load all instances of the field
+  // load instance of the field
   $options = array('field_name' => $field['field_name'], 'type_name' => $field['type_name']);
   $instances = content_field_instance_read($options);
   if (!$instances) {
@@ -278,7 +278,7 @@ function em_fg_instance_status($field) {
       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
   }
-  return EM_STATUS_IN_DATABASE;
+  return EM_STATUS_IN_CODE;
 }
 
 
@@ -307,6 +307,43 @@ function em_fg_gatekeeper_to_hook_code($objects, $module) {
     $output .= $dump;
     
     $output .= "  \${$export['identifier']}s['" . check_plain($instance['field_name']) . "'] = \${$export['identifier']};\n\n";
+  }
+  $output .= " return \${$export['identifier']}s;\n";
+  $output .= "}\n";
+  return $output;
+};
+
+function em_fg_instances_to_hook_code($objects, $module) {
+  $export = em_export('field_instances');
+  $output = "/**\n";
+  $output .= " * Implementation of hook_{$export['default hook']}().\n";
+  $output .= " */\n";
+  $output .= "function " . $module . "_{$export['default hook']}() {\n";
+    drush_print_r($objects);
+  foreach ($objects as $name) {
+    list($type, $field) = explode('-', $name);
+    if (!$field) {
+      continue;
+    }
+    module_load_include('inc', 'content', '/includes/content.crud');
+    $instances = content_field_instance_read(array('field_name' => $field,
+                                                   'type_name' => $type));
+    $instance = $instances[0];
+    $instance['locked'] = 1;
+    
+    $instance = field_gatekeeper_instance_clean($instance);
+    $dump = "\${$export['identifier']} = ";
+    $dump .= var_export($instance, TRUE);
+    $dump .= ";\n";
+    // indent the exported data to make it more readable
+    $dump = preg_replace('/^/m', '  ', $dump);
+
+    // clean up the dump a bit by removing unwanted white space
+    $dump = preg_replace('/array\s+\(/', 'array(', $dump);
+    $dump = preg_replace('/=>\s+array\(/', '=> array(', $dump);
+    $output .= $dump;
+    
+    $output .= "  \${$export['identifier']}s['" . check_plain($name) . "'] = \${$export['identifier']};\n\n";
   }
   $output .= " return \${$export['identifier']}s;\n";
   $output .= "}\n";
@@ -569,24 +606,36 @@ function em_update() {
     return FALSE;
   }
 
+  $api_mapping = array();
+  $apis_changed = array();
   // Get overridden module exports.
+  // TODO: Only rewrite files if anything is changed.
   $module_exports = em_get_module_exports_all($module);
   foreach ($module_exports as $table => $exports) {
     $site_exports = em_get_site_exportables($table, $exports);
+    $api = em_export('api');
+    $api_mapping[$api][] = $table;
     foreach ($site_exports as $name => $object) {
       $func = em_export($table, 'status callback');
       if ($func($object) & EM_STATUS_IN_DATABASE) {
         // Replace module by sites.
+        $apis_changed[$api] = TRUE;
         $module_exports[$table][$name] = $object;
       }
     }
   }
+  $rewrite = array();
+  foreach ($apis_changed as $api => $dummy) {
+    foreach ($api_mapping[$api] as $table) {
+      $rewrite[$table] = $module_exports[$table];
+    }
+  }
 
   // Write files.
-  em_write_exportables($module, $module_exports);
+  em_write_exportables($module, $rewrite);
   drush_print('Updated files');
   
-  drush_op('em_revert_exportables', $module_exports);
+  drush_op('em_revert_exportables', $rewrite);
 }
 
 function em_write_exportables($module, $exportables) {
