@@ -373,7 +373,7 @@ function em_export_view($view, $indent) {
 
 function em_view_status($export) {
   if ($export->type == t('Overridden')) {
-    return EM_STATUS_IN_DATABASE & EM_STATUS_IN_CODE;
+    return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
   } elseif ($export->type == t('Standard')) {
     return EM_STATUS_IN_CODE;
   }
