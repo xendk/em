@@ -32,41 +32,82 @@ function em_drush_command() {
     // We're skipping the customary drush_ prefix, as it increases the chance
     // of colliding with a hook.
     'callback' => 'em_status',
+    'description' => 'Show exportable status of current module.',
+    'arguments' => array(
+      'name' => 'The name of the field whose instances you wish to compare. Mandatory.',
+    ),
     'options' => array(
       '-o' => 'Only show overridden.',
+    ),
+    'examples' => array(
+      'em status field_teaser' => 'Compare all instances of field_teaser.',
     ),
     // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
   );
 
   $items['em revert'] = array(
     'callback' => 'em_revert',
+    'description' => 'Revert an exportable',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to revert, or \'all\' to revert all module defined exportables.'
+    ),
+    'examples' => array(
+      'em revert views:frontpage' => 'Revert the view "frontpage".',
     ),
   );
   
   $items['em dump'] = array(
     'callback' => 'em_dump',
+    'description' => 'Dump an exportable to the current module',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to add.'
+    ),
+    'examples' => array(
+      'em dump views:frontpage' => 'Dump the view "frontpage" to the relevant file.',
     ),
   );
 
   $items['em remove'] = array(
     'callback' => 'em_remove',
+    'description' => 'Remove an exportable from the current module',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to remove.'
+    ),
+    'examples' => array(
+      'em remove views:frontpage' => 'Remove the "frontpage" view from the relevant file.',
     ),
   );
 
   $items['em update'] = array(
     'callback' => 'em_update',
+    'description' => 'Update module exportables from site',
   );
   
   $items['em list'] = array(
     'callback' => 'em_list',
+    'description' => 'List site exportables',
   );
   return $items;
+}
+
+/**
+ * Implementation of hook_drush_help().
+ */
+function em_drush_help($section) {
+  switch ($section) {
+    case 'drush:em status':
+      return dt('Lists all exportables defined by the current module, and whether they are overridden or not.');
+    case 'drush:em revert':
+      return dt('Reverts the given exportables to their code defined state.');
+    case 'drush:em dump':
+      return dt('Dump an exportable to the current module. You might need to add a function like hook_ctools_api to your module file.');
+    case 'drush:em remove':
+      return dt('Remove an exportable from the current module.');
+    case 'drush:em update':
+      return dt('Updates all overridden exportables defined by the current module with the settings from the site, and reverts them afterwards.');
+    case 'drush:em list':
+      return dt('Lists all site exportables that is not defined in code (overridden or not).');
+  }
 }
 
 /**
