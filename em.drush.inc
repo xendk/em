@@ -55,7 +55,7 @@ function em_drush_command() {
       'em revert views:frontpage' => 'Revert the view "frontpage".',
     ),
   );
-  
+
   $items['em dump'] = array(
     'callback' => 'em_dump',
     'description' => 'Dump an exportable to the current module',
@@ -82,7 +82,7 @@ function em_drush_command() {
     'callback' => 'em_update',
     'description' => 'Update module exportables from site',
   );
-  
+
   $items['em list'] = array(
     'callback' => 'em_list',
     'description' => 'List site exportables',
@@ -175,7 +175,7 @@ function em_export($table = NULL, $key = NULL) {
         'delete callback' => '',
         'is array' => TRUE,
       );
-      
+
       $export_types['field_instances'] = array(
         'api' => 'field_instances',
         'identifier' => 'field',
@@ -194,7 +194,7 @@ function em_export($table = NULL, $key = NULL) {
     // Find out what ctools exportables that's available.
     ctools_include('export');
     $schemas = ctools_export_get_schemas(TRUE);
-  
+
     foreach ($schemas as $etable => $schema) {
       if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
         $export_types[$etable] = array(
@@ -246,7 +246,7 @@ function em_fg_get_all_gatekeeper() {
   // Overlay module defined.
   $gw_fields = field_gatekeeper_get_field_gatekeeper();
   foreach ($gw_fields as $field) {
-    $fields[$field['field_name']] = field_gatekeeper_base_clean($field);    
+    $fields[$field['field_name']] = field_gatekeeper_base_clean($field);
   }
   return $fields;
 }
@@ -264,7 +264,7 @@ function em_fg_get_all_instances() {
   // Overlay module defined.
   $gw_fields = field_gatekeeper_get_field_instances();
   foreach ($gw_fields as $field) {
-    $fields[$field['name']] = field_gatekeeper_instance_clean($field);    
+    $fields[$field['name']] = field_gatekeeper_instance_clean($field);
   }
   return $fields;
 }
@@ -338,7 +338,7 @@ function em_fg_gatekeeper_to_hook_code($objects, $module) {
     $instances = content_field_instance_read(array('field_name' => $name));
     $instance = $instances[0];
     $instance['locked'] = 1;
-    
+
     $instance = field_gatekeeper_base_clean($instance);
     $dump = "\${$export['identifier']} = ";
     $dump .= var_export($instance, TRUE);
@@ -350,7 +350,7 @@ function em_fg_gatekeeper_to_hook_code($objects, $module) {
     $dump = preg_replace('/array\s+\(/', 'array(', $dump);
     $dump = preg_replace('/=>\s+array\(/', '=> array(', $dump);
     $output .= $dump;
-    
+
     $output .= "  \${$export['identifier']}s['" . check_plain($instance['field_name']) . "'] = \${$export['identifier']};\n\n";
   }
   $output .= " return \${$export['identifier']}s;\n";
@@ -375,7 +375,7 @@ function em_fg_instances_to_hook_code($objects, $module) {
                                                    'type_name' => $type));
     $instance = $instances[0];
     $instance['locked'] = 1;
-    
+
     $instance = field_gatekeeper_instance_clean($instance);
     $dump = "\${$export['identifier']} = ";
     $dump .= var_export($instance, TRUE);
@@ -387,7 +387,7 @@ function em_fg_instances_to_hook_code($objects, $module) {
     $dump = preg_replace('/array\s+\(/', 'array(', $dump);
     $dump = preg_replace('/=>\s+array\(/', '=> array(', $dump);
     $output .= $dump;
-    
+
     $output .= "  \${$export['identifier']}s['" . check_plain($name) . "'] = \${$export['identifier']};\n\n";
   }
   $output .= " return \${$export['identifier']}s;\n";
@@ -480,7 +480,7 @@ function em_status() {
 function em_revert() {
   if (!$module = em_get_module()) {
     return FALSE;
-  }  
+  }
 
   $arguments = func_get_args();
   if (empty($arguments)) {
@@ -513,12 +513,12 @@ function em_revert() {
     }
     list($table, $name) = explode(':', $arg, 2);
     if (!$name) {
-      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));      
+      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
     } else {
       if ($resetables[$table][$name]) {
         $reset[$table][$name] = $resetables[$table][$name];
       } else {
-        return drush_set_error(dt('Unknown exportable or not overridden: @name.', array('@name' => $arg)));      
+        return drush_set_error(dt('Unknown exportable or not overridden: @name.', array('@name' => $arg)));
       }
     }
   }
@@ -555,11 +555,11 @@ function em_dump() {
   if (empty($arguments)) {
     return drush_set_error(dt('No exportables specified.'));
   }
-  
+
   foreach ($arguments as $arg) {
     list($table, $name) = explode(':', $arg, 2);
     if (!$name) {
-      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));      
+      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
     } else {
       $dump[$table][] = $name;
     }
@@ -588,7 +588,7 @@ function em_dump() {
         }
       }
     } else {
-      return drush_set_error(dt('Unknown type @type.', array('@type' => $table)));      
+      return drush_set_error(dt('Unknown type @type.', array('@type' => $table)));
     }
   }
 
@@ -597,10 +597,10 @@ function em_dump() {
     $module_exports = em_get_module_exports($module, $table);
     // Override or add.
     $module_exports = array_merge($module_exports,
-                                  em_get_site_exportables($table, $entries));        
+                                  em_get_site_exportables($table, $entries));
     $reexport[$table] = $module_exports;
   }
-  
+
   em_write_exportables($module, $reexport);
 
   drush_op('em_revert_exportables', $reexport);
@@ -619,17 +619,17 @@ function em_remove() {
   if (empty($arguments)) {
     return drush_set_error(dt('No exportables specified.'));
   }
-  
+
   foreach ($arguments as $arg) {
     list($table, $name) = explode(':', $arg, 2);
     if (!$name) {
-      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));      
+      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
     } else {
       $remove[$table][$name] = $name;
     }
   }
 
-  
+
   // Get overridden module exports.
   // TODO: don't bother rewriting files, if we're not messing with it.
   $module_exports = em_get_module_exports_all($module);
@@ -644,7 +644,7 @@ function em_remove() {
 
   // Write files.
   em_write_exportables($module, $module_exports);
-  
+
 }
 
 function em_update() {
@@ -679,7 +679,7 @@ function em_update() {
   // Write files.
   em_write_exportables($module, $rewrite);
   drush_print('Updated files');
-  
+
   drush_op('em_revert_exportables', $rewrite);
 }
 
@@ -721,7 +721,7 @@ function em_write_exportables($module, $exportables) {
             return drush_set_error('Aborting.');
           }
         }
-        
+
         $output = $export['to hook code callback'](array_keys($objects), $module);
         $code[$api] .= $output;
       } else {
@@ -765,7 +765,7 @@ function em_write($filename, $content) {
   // Still write the new file.
   file_put_contents($filename . '.new', $content);
   drush_op('rename', $filename, $filename . '.em~');
-  drush_op('rename', $filename . '.new', $filename);  
+  drush_op('rename', $filename . '.new', $filename);
 }
 
 /**
@@ -785,7 +785,7 @@ function em_list() {
   foreach ($output as $table => $listing) {
     drush_print($table . ':');
     drush_print($listing);
-  }  
+  }
 }
 
 /**
@@ -821,7 +821,7 @@ function em_get_module_exports($module, $table) {
     }
   }
   //chdir($old);
-  return $module_exports;  
+  return $module_exports;
 }
 
 /**
@@ -835,7 +835,7 @@ function em_get_site_exportables($table, $exportables = NULL) {
   $args = $export['load arguments'];
   $args[] = array_keys($exportables);
   $site_exports = call_user_func_array($export['load callback'], $args);
-  return $site_exports;  
+  return $site_exports;
 }
 
 function em_get_module() {
