@@ -186,7 +186,7 @@ function em_export($table = NULL, $key = NULL) {
         //'export callback' => '',
         'to hook code callback' => 'em_fg_instances_to_hook_code',
         'status callback' => 'em_fg_instance_status',
-        'delete callback' => '',
+        'delete callback' => 'em_fg_instance_delete',
         'is array' => TRUE,
       );
     }
@@ -320,6 +320,10 @@ function em_fg_instance_status($field) {
     }
   }
   return EM_STATUS_IN_CODE;
+}
+
+function em_fg_instance_delete($field) {
+  field_gatekeeper($field);
 }
 
 
@@ -500,6 +504,7 @@ function em_revert() {
       }
     }
   }
+
   // Filter to specified.
   foreach ($arguments as $arg) {
     if ($arg == 'all') {
@@ -513,7 +518,7 @@ function em_revert() {
       if ($resetables[$table][$name]) {
         $reset[$table][$name] = $resetables[$table][$name];
       } else {
-        return drush_set_error(dt('Unknown exportable @name.', array('@name' => $arg)));      
+        return drush_set_error(dt('Unknown exportable or not overridden: @name.', array('@name' => $arg)));      
       }
     }
   }
