@@ -319,7 +319,7 @@ function em_fg_instances_to_hook_code($objects, $module) {
   $output .= " * Implementation of hook_{$export['default hook']}().\n";
   $output .= " */\n";
   $output .= "function " . $module . "_{$export['default hook']}() {\n";
-    drush_print_r($objects);
+
   foreach ($objects as $name) {
     list($type, $field) = explode('-', $name);
     if (!$field) {
@@ -613,7 +613,8 @@ function em_update() {
   $module_exports = em_get_module_exports_all($module);
   foreach ($module_exports as $table => $exports) {
     $site_exports = em_get_site_exportables($table, $exports);
-    $api = em_export('api');
+    $api = em_export($table, 'api');
+    drush_print($api);
     $api_mapping[$api][] = $table;
     foreach ($site_exports as $name => $object) {
       $func = em_export($table, 'status callback');
@@ -630,7 +631,7 @@ function em_update() {
       $rewrite[$table] = $module_exports[$table];
     }
   }
-
+  drush_print_r($apis_changed);
   // Write files.
   em_write_exportables($module, $rewrite);
   drush_print('Updated files');
