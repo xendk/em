@@ -294,8 +294,14 @@ function em_fg_load_instances($names) {
 function em_fg_gatekeeper_status($field) {
   module_load_include('inc', 'content', '/includes/content.crud');
   // load all instances of the field
+  $code_defined = field_gatekeeper_get_field_gatekeeper();
+  if (!$code_defined[$field['field_name']]) {
+    return EM_STATUS_IN_DATABASE;    
+  }
+
   $options = array('field_name' => $field['field_name']);
   $instances = content_field_instance_read($options);
+
   foreach ($instances as $instance) {
     $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
     if ($diffs) {
@@ -309,10 +315,17 @@ function em_fg_instance_status($field) {
   module_load_include('inc', 'content', '/includes/content.crud');
   // load instance of the field
   $options = array('field_name' => $field['field_name'], 'type_name' => $field['type_name']);
+
+  $code_defined = field_gatekeeper_get_field_instances();
+  if (!$code_defined[$field['name']]) {
+    return EM_STATUS_IN_DATABASE;    
+  }
+
   $instances = content_field_instance_read($options);
   if (!$instances) {
     return EM_STATUS_IN_CODE;
   }
+  
   foreach ($instances as $instance) {
     $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_instance_clean($instance));
     if ($diffs) {
