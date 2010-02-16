@@ -191,26 +191,28 @@ function em_export($table = NULL, $key = NULL) {
       );
     }
 
-    // Find out what ctools exportables that's available.
-    ctools_include('export');
-    $schemas = ctools_export_get_schemas(TRUE);
+    if (module_exists('ctools')) {
+      // Find out what ctools exportables that's available.
+      ctools_include('export');
+      $schemas = ctools_export_get_schemas(TRUE);
 
-    foreach ($schemas as $etable => $schema) {
-      if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
-        $export_types[$etable] = array(
-          'api' => $schema['export']['api']['api'],
-          'identifier' => $schema['export']['identifier'],
-          'key' => $schema['export']['key'],
-          'export callback' => $schema['export']['export callback'],
-          'default hook' => $schema['export']['default hook'],
-          'list callback' => $schema['export']['list callback'],
-          'to hook code callback' => $schema['export']['to hook code callback'],
-          'load callback' => 'ctools_export_load_object',
-          'load arguments' => array($etable, 'names'),
-          'status callback' => 'em_ctools_status',
-        );
-        if ($defaults[$etable]) {
-          $export_types[$etable] += $defaults[$etable];
+      foreach ($schemas as $etable => $schema) {
+        if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
+          $export_types[$etable] = array(
+            'api' => $schema['export']['api']['api'],
+            'identifier' => $schema['export']['identifier'],
+            'key' => $schema['export']['key'],
+            'export callback' => $schema['export']['export callback'],
+            'default hook' => $schema['export']['default hook'],
+            'list callback' => $schema['export']['list callback'],
+            'to hook code callback' => $schema['export']['to hook code callback'],
+            'load callback' => 'ctools_export_load_object',
+            'load arguments' => array($etable, 'names'),
+            'status callback' => 'em_ctools_status',
+          );
+          if ($defaults[$etable]) {
+            $export_types[$etable] += $defaults[$etable];
+          }
         }
       }
     }
