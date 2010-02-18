@@ -172,7 +172,7 @@ function em_export($table = NULL, $key = NULL) {
         //'export callback' => '',
         'to hook code callback' => 'em_fg_gatekeeper_to_hook_code',
         'status callback' => 'em_fg_gatekeeper_status',
-        'delete callback' => '',
+        'delete callback' => 'em_fg_gatekeeper_delete',
         'is array' => TRUE,
       );
 
@@ -305,8 +305,10 @@ function em_fg_gatekeeper_status($field) {
   $instances = content_field_instance_read($options);
 
   foreach ($instances as $instance) {
+    $instance['locked'] = '1';
     $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
     if ($diffs) {
+      drush_print_r(array($field['allowed_values'], $instance['allowed_values']));
       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
   }
@@ -329,18 +331,27 @@ function em_fg_instance_status($field) {
   }
   
   foreach ($instances as $instance) {
+    $instance['locked'] = '1';
     $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_instance_clean($instance));
     if ($diffs) {
-      return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
+       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
   }
   return EM_STATUS_IN_CODE;
 }
 
-function em_fg_instance_delete($field) {
+function em_fg_gatekeeper_delete($field) {
+  drush_print(dt('Reverting !field_name will also revert all instances of the field.', array('!field_name' => $field['field_name'])));
+  if(!drush_confirm(dt('Do you want to do this?'))) {
+    return;
+  }
   field_gatekeeper($field);
 }
 
+
+function em_fg_instance_delete($field) {
+  field_gatekeeper($field);
+}
 
 function em_fg_gatekeeper_to_hook_code($objects, $module) {
   $export = em_export('field_gatekeeper');
@@ -355,20 +366,14 @@ function em_fg_gatekeeper_to_hook_code($objects, $module) {
     $instance['locked'] = 1;
 
     $instance = field_gatekeeper_base_clean($instance);
-    $dump = "\${$export['identifier']} = ";
-    $dump .= var_export($instance, TRUE);
+    $dump = "  \${$export['identifier']} = ";
+    $dump .= em_var_export($instance, '  ');
     $dump .= ";\n";
-    // indent the exported data to make it more readable
-    $dump = preg_replace('/^/m', '  ', $dump);
-
-    // clean up the dump a bit by removing unwanted white space
-    $dump = preg_replace('/array\s+\(/', 'array(', $dump);
-    $dump = preg_replace('/=>\s+array\(/', '=> array(', $dump);
     $output .= $dump;
 
     $output .= "  \${$export['identifier']}s['" . check_plain($instance['field_name']) . "'] = \${$export['identifier']};\n\n";
   }
-  $output .= " return \${$export['identifier']}s;\n";
+  $output .= "  return \${$export['identifier']}s;\n";
   $output .= "}\n";
   return $output;
 };
@@ -392,20 +397,14 @@ function em_fg_instances_to_hook_code($objects, $module) {
     $instance['locked'] = 1;
 
     $instance = field_gatekeeper_instance_clean($instance);
-    $dump = "\${$export['identifier']} = ";
-    $dump .= var_export($instance, TRUE);
+    $dump = "  \${$export['identifier']} = ";
+    $dump .= em_var_export($instance, '  ');
     $dump .= ";\n";
-    // indent the exported data to make it more readable
-    $dump = preg_replace('/^/m', '  ', $dump);
-
-    // clean up the dump a bit by removing unwanted white space
-    $dump = preg_replace('/array\s+\(/', 'array(', $dump);
-    $dump = preg_replace('/=>\s+array\(/', '=> array(', $dump);
     $output .= $dump;
 
     $output .= "  \${$export['identifier']}s['" . check_plain($name) . "'] = \${$export['identifier']};\n\n";
   }
-  $output .= " return \${$export['identifier']}s;\n";
+  $output .= "  return \${$export['identifier']}s;\n";
   $output .= "}\n";
   return $output;
 }
@@ -548,9 +547,9 @@ function em_revert_exportables($exportables) {
   foreach ($exportables as $table => $objects) {
     foreach ($objects as $name => $object) {
       if ($exports[$table]['delete callback']) {
+        drush_print(dt('Trying to revert @name.', array('@name' => $name)));
         drush_op($exports[$table]['delete callback'], $object);
         // $exports[$table]['delete callback']($object);
-        drush_print(dt('Reverted @name.', array('@name' => $name)));
       } else {
         drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
         $return = FALSE;
@@ -872,4 +871,47 @@ function em_get_module() {
     // TODO: if more than one, list and provide argument.
     return drush_set_error(dt('No module.'));
   }
+}
+
+/**
+ * Export a field.
+ *
+ * Stolen from views.
+ */
+function em_var_export($var, $prefix = '', $init = TRUE) {
+  if (is_array($var)) {
+    if (empty($var)) {
+      $output = 'array()';
+    }
+    else {
+      $output = "array(\n";
+      foreach ($var as $key => $value) {
+        $output .= "  '$key' => " . views_var_export($value, '  ', FALSE) . ",\n";
+      }
+      $output .= ')';
+    }
+  }
+  else if (is_bool($var)) {
+    $output = $var ? 'TRUE' : 'FALSE';
+  }
+  else if (is_string($var) && strpos($var, "\n") !== FALSE) {
+    // Replace line breaks in strings with a token for replacement
+    // at the very end. This protects multi-line strings from
+    // unintentional indentation.
+    $var = str_replace("\n", "***BREAK***", $var);
+    $output = var_export($var, TRUE);
+  }
+  else {
+    $output = var_export($var, TRUE);
+  }
+
+  if ($prefix) {
+    $output = str_replace("\n", "\n$prefix", $output);
+  }
+
+  if ($init) {
+    $output = str_replace("***BREAK***", "\n", $output);
+  }
+
+  return $output;
 }
