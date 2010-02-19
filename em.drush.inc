@@ -778,7 +778,7 @@ function em_write_exportables($module, $exportables) {
   // TODO: The api hook and the dependencies.
   foreach ($code as $api => $hook_code) {
     $file_code = "<?php\n";
-    $file_code .= "// \$Id" . ": $\n\n";
+    $file_code .= "// \$Id" . "$\n\n";
     $file_code .= "/**\n";
     $file_code .= " * @file\n";
     $file_code .= " * Bulk export of $api objects exported by Drush em.\n";
