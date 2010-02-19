@@ -220,9 +220,6 @@ function em_export($table = NULL, $key = NULL) {
              $export_types[$etable]= $overrides[$etable] + $export_types[$etable];
           }
         }
-        else {
-          drush_print_r(array($etable, $schema['export']));
-        }
       }
     }
   }
@@ -317,7 +314,6 @@ function em_fg_gatekeeper_status($field) {
     $instance['locked'] = '1';
     $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
     if ($diffs) {
-      drush_print_r(array($field['allowed_values'], $instance['allowed_values']));
       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
   }
