@@ -129,7 +129,7 @@ function em_tables() {
  */
 function em_export($table = NULL, $key = NULL) {
   static $export_types = NULL;
-  static $defaults = array(
+  static $overrides = array(
     'page_manager_pages' => array(
       'pre export' => 'page_manager_get_tasks',
       'delete callback' => 'em_delete_page_manager_pages',
@@ -139,6 +139,12 @@ function em_export($table = NULL, $key = NULL) {
     ),
     'panels_mini' => array(
       'delete callback' => 'panels_mini_delete',
+    ),
+    'variable' => array(
+      // Stongarm 2.0 RC1 defines a non-existent export callback.
+      'export callback' => 'em_export_strongarm',
+      'status callback' => 'em_strongarm_status',
+      'delete callback' => 'em_strongarm_delete',
     ),
   );
 
@@ -197,7 +203,7 @@ function em_export($table = NULL, $key = NULL) {
       $schemas = ctools_export_get_schemas(TRUE);
 
       foreach ($schemas as $etable => $schema) {
-        if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
+        if ($schema['export']['api']) {
           $export_types[$etable] = array(
             'api' => $schema['export']['api']['api'],
             'identifier' => $schema['export']['identifier'],
@@ -210,9 +216,12 @@ function em_export($table = NULL, $key = NULL) {
             'load arguments' => array($etable, 'names'),
             'status callback' => 'em_ctools_status',
           );
-          if ($defaults[$etable]) {
-            $export_types[$etable] += $defaults[$etable];
+          if ($overrides[$etable]) {
+             $export_types[$etable]= $overrides[$etable] + $export_types[$etable];
           }
+        }
+        else {
+          drush_print_r(array($etable, $schema['export']));
         }
       }
     }
@@ -298,7 +307,7 @@ function em_fg_gatekeeper_status($field) {
   // load all instances of the field
   $code_defined = field_gatekeeper_get_field_gatekeeper();
   if (!$code_defined[$field['field_name']]) {
-    return EM_STATUS_IN_DATABASE;    
+    return EM_STATUS_IN_DATABASE;
   }
 
   $options = array('field_name' => $field['field_name']);
@@ -322,14 +331,14 @@ function em_fg_instance_status($field) {
 
   $code_defined = field_gatekeeper_get_field_instances();
   if (!$code_defined[$field['name']]) {
-    return EM_STATUS_IN_DATABASE;    
+    return EM_STATUS_IN_DATABASE;
   }
 
   $instances = content_field_instance_read($options);
   if (!$instances) {
     return EM_STATUS_IN_CODE;
   }
-  
+
   foreach ($instances as $instance) {
     $instance['locked'] = '1';
     $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_instance_clean($instance));
@@ -429,6 +438,9 @@ function em_export_view($view, $indent) {
   return $view->export($indent);
 }
 
+function em_export_strongarm($variable, $indent = '') {
+  return ctools_export_object('variable', $variable, $indent);
+}
 
 function em_view_status($export) {
   if ($export->type == t('Overridden')) {
@@ -451,6 +463,10 @@ function em_ctools_status($export) {
   return $status;
 }
 
+function em_strongarm_status($export) {
+  // Due to the nature of strongarm, exports are never overridden.
+  return EM_STATUS_IN_CODE;
+}
 
 /**
  * Helper function to delete view.
@@ -459,6 +475,10 @@ function em_view_delete($view) {
   $view->delete();
 }
 
+function em_strongarm_delete($export) {
+  // As strongarm can't be overridden, reverting is a noop.
+  return;
+}
 
 function em_status() {
   if (!$module = em_get_module()) {
@@ -582,7 +602,7 @@ function em_dump() {
   $reexport = array();
   foreach ($dump as $table => $entries) {
     if ($export = em_export($table)) {
-      $site_exportables = em_get_site_exportables($table);
+      $site_exportables = em_get_site_exportables($table, array_flip($entries));
       foreach ($entries as $entry) {
         if (!$site_exportables[$entry]) {
           return drush_set_error(dt("Unknown @type '@entry'.",
