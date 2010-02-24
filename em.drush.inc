@@ -129,7 +129,7 @@ function em_tables() {
  */
 function em_export($table = NULL, $key = NULL) {
   static $export_types = NULL;
-  static $defaults = array(
+  static $overrides = array(
     'page_manager_pages' => array(
       'pre export' => 'page_manager_get_tasks',
       'delete callback' => 'em_delete_page_manager_pages',
@@ -139,6 +139,12 @@ function em_export($table = NULL, $key = NULL) {
     ),
     'panels_mini' => array(
       'delete callback' => 'panels_mini_delete',
+    ),
+    'variable' => array(
+      // Stongarm 2.0 RC1 defines a non-existent export callback.
+      'export callback' => 'em_export_strongarm',
+      'status callback' => 'em_strongarm_status',
+      'delete callback' => 'em_strongarm_delete',
     ),
   );
 
@@ -172,7 +178,7 @@ function em_export($table = NULL, $key = NULL) {
         //'export callback' => '',
         'to hook code callback' => 'em_fg_gatekeeper_to_hook_code',
         'status callback' => 'em_fg_gatekeeper_status',
-        'delete callback' => '',
+        'delete callback' => 'em_fg_gatekeeper_delete',
         'is array' => TRUE,
       );
 
@@ -197,7 +203,7 @@ function em_export($table = NULL, $key = NULL) {
       $schemas = ctools_export_get_schemas(TRUE);
 
       foreach ($schemas as $etable => $schema) {
-        if (function_exists($schema['export']['list callback']) and $schema['export']['api']) {
+        if ($schema['export']['api']) {
           $export_types[$etable] = array(
             'api' => $schema['export']['api']['api'],
             'identifier' => $schema['export']['identifier'],
@@ -210,8 +216,8 @@ function em_export($table = NULL, $key = NULL) {
             'load arguments' => array($etable, 'names'),
             'status callback' => 'em_ctools_status',
           );
-          if ($defaults[$etable]) {
-            $export_types[$etable] += $defaults[$etable];
+          if ($overrides[$etable]) {
+             $export_types[$etable]= $overrides[$etable] + $export_types[$etable];
           }
         }
       }
@@ -298,13 +304,14 @@ function em_fg_gatekeeper_status($field) {
   // load all instances of the field
   $code_defined = field_gatekeeper_get_field_gatekeeper();
   if (!$code_defined[$field['field_name']]) {
-    return EM_STATUS_IN_DATABASE;    
+    return EM_STATUS_IN_DATABASE;
   }
 
   $options = array('field_name' => $field['field_name']);
   $instances = content_field_instance_read($options);
 
   foreach ($instances as $instance) {
+    $instance['locked'] = '1';
     $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
     if ($diffs) {
       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
@@ -320,27 +327,36 @@ function em_fg_instance_status($field) {
 
   $code_defined = field_gatekeeper_get_field_instances();
   if (!$code_defined[$field['name']]) {
-    return EM_STATUS_IN_DATABASE;    
+    return EM_STATUS_IN_DATABASE;
   }
 
   $instances = content_field_instance_read($options);
   if (!$instances) {
     return EM_STATUS_IN_CODE;
   }
-  
+
   foreach ($instances as $instance) {
+    $instance['locked'] = '1';
     $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_instance_clean($instance));
     if ($diffs) {
-      return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
+       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
   }
   return EM_STATUS_IN_CODE;
 }
 
-function em_fg_instance_delete($field) {
+function em_fg_gatekeeper_delete($field) {
+  drush_print(dt('Reverting !field_name will also revert all instances of the field.', array('!field_name' => $field['field_name'])));
+  if(!drush_confirm(dt('Do you want to do this?'))) {
+    return;
+  }
   field_gatekeeper($field);
 }
 
+
+function em_fg_instance_delete($field) {
+  field_gatekeeper($field);
+}
 
 function em_fg_gatekeeper_to_hook_code($objects, $module) {
   $export = em_export('field_gatekeeper');
@@ -355,20 +371,14 @@ function em_fg_gatekeeper_to_hook_code($objects, $module) {
     $instance['locked'] = 1;
 
     $instance = field_gatekeeper_base_clean($instance);
-    $dump = "\${$export['identifier']} = ";
-    $dump .= var_export($instance, TRUE);
+    $dump = "  \${$export['identifier']} = ";
+    $dump .= em_var_export($instance, '  ');
     $dump .= ";\n";
-    // indent the exported data to make it more readable
-    $dump = preg_replace('/^/m', '  ', $dump);
-
-    // clean up the dump a bit by removing unwanted white space
-    $dump = preg_replace('/array\s+\(/', 'array(', $dump);
-    $dump = preg_replace('/=>\s+array\(/', '=> array(', $dump);
     $output .= $dump;
 
     $output .= "  \${$export['identifier']}s['" . check_plain($instance['field_name']) . "'] = \${$export['identifier']};\n\n";
   }
-  $output .= " return \${$export['identifier']}s;\n";
+  $output .= "  return \${$export['identifier']}s;\n";
   $output .= "}\n";
   return $output;
 };
@@ -392,20 +402,14 @@ function em_fg_instances_to_hook_code($objects, $module) {
     $instance['locked'] = 1;
 
     $instance = field_gatekeeper_instance_clean($instance);
-    $dump = "\${$export['identifier']} = ";
-    $dump .= var_export($instance, TRUE);
+    $dump = "  \${$export['identifier']} = ";
+    $dump .= em_var_export($instance, '  ');
     $dump .= ";\n";
-    // indent the exported data to make it more readable
-    $dump = preg_replace('/^/m', '  ', $dump);
-
-    // clean up the dump a bit by removing unwanted white space
-    $dump = preg_replace('/array\s+\(/', 'array(', $dump);
-    $dump = preg_replace('/=>\s+array\(/', '=> array(', $dump);
     $output .= $dump;
 
     $output .= "  \${$export['identifier']}s['" . check_plain($name) . "'] = \${$export['identifier']};\n\n";
   }
-  $output .= " return \${$export['identifier']}s;\n";
+  $output .= "  return \${$export['identifier']}s;\n";
   $output .= "}\n";
   return $output;
 }
@@ -430,6 +434,9 @@ function em_export_view($view, $indent) {
   return $view->export($indent);
 }
 
+function em_export_strongarm($variable, $indent = '') {
+  return ctools_export_object('variable', $variable, $indent);
+}
 
 function em_view_status($export) {
   if ($export->type == t('Overridden')) {
@@ -452,6 +459,10 @@ function em_ctools_status($export) {
   return $status;
 }
 
+function em_strongarm_status($export) {
+  // Due to the nature of strongarm, exports are never overridden.
+  return EM_STATUS_IN_CODE;
+}
 
 /**
  * Helper function to delete view.
@@ -460,6 +471,10 @@ function em_view_delete($view) {
   $view->delete();
 }
 
+function em_strongarm_delete($export) {
+  // As strongarm can't be overridden, reverting is a noop.
+  return;
+}
 
 function em_status() {
   if (!$module = em_get_module()) {
@@ -548,9 +563,9 @@ function em_revert_exportables($exportables) {
   foreach ($exportables as $table => $objects) {
     foreach ($objects as $name => $object) {
       if ($exports[$table]['delete callback']) {
+        drush_print(dt('Trying to revert @name.', array('@name' => $name)));
         drush_op($exports[$table]['delete callback'], $object);
         // $exports[$table]['delete callback']($object);
-        drush_print(dt('Reverted @name.', array('@name' => $name)));
       } else {
         drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
         $return = FALSE;
@@ -583,7 +598,7 @@ function em_dump() {
   $reexport = array();
   foreach ($dump as $table => $entries) {
     if ($export = em_export($table)) {
-      $site_exportables = em_get_site_exportables($table);
+      $site_exportables = em_get_site_exportables($table, array_flip($entries));
       foreach ($entries as $entry) {
         if (!$site_exportables[$entry]) {
           return drush_set_error(dt("Unknown @type '@entry'.",
@@ -763,7 +778,7 @@ function em_write_exportables($module, $exportables) {
   // TODO: The api hook and the dependencies.
   foreach ($code as $api => $hook_code) {
     $file_code = "<?php\n";
-    $file_code .= "// \$Id" . ": $\n\n";
+    $file_code .= "// \$Id" . "$\n\n";
     $file_code .= "/**\n";
     $file_code .= " * @file\n";
     $file_code .= " * Bulk export of $api objects exported by Drush em.\n";
@@ -872,4 +887,47 @@ function em_get_module() {
     // TODO: if more than one, list and provide argument.
     return drush_set_error(dt('No module.'));
   }
+}
+
+/**
+ * Export a field.
+ *
+ * Stolen from views.
+ */
+function em_var_export($var, $prefix = '', $init = TRUE) {
+  if (is_array($var)) {
+    if (empty($var)) {
+      $output = 'array()';
+    }
+    else {
+      $output = "array(\n";
+      foreach ($var as $key => $value) {
+        $output .= "  '$key' => " . views_var_export($value, '  ', FALSE) . ",\n";
+      }
+      $output .= ')';
+    }
+  }
+  else if (is_bool($var)) {
+    $output = $var ? 'TRUE' : 'FALSE';
+  }
+  else if (is_string($var) && strpos($var, "\n") !== FALSE) {
+    // Replace line breaks in strings with a token for replacement
+    // at the very end. This protects multi-line strings from
+    // unintentional indentation.
+    $var = str_replace("\n", "***BREAK***", $var);
+    $output = var_export($var, TRUE);
+  }
+  else {
+    $output = var_export($var, TRUE);
+  }
+
+  if ($prefix) {
+    $output = str_replace("\n", "\n$prefix", $output);
+  }
+
+  if ($init) {
+    $output = str_replace("***BREAK***", "\n", $output);
+  }
+
+  return $output;
 }
