@@ -695,13 +695,19 @@ function em_update() {
     $site_exports = em_get_site_exportables($table, $exports);
     $api = em_export($table, 'api');
     $api_mapping[$api][] = $table;
-    foreach ($site_exports as $name => $object) {
-      $func = em_export($table, 'status callback');
-      if ($func($object) & EM_STATUS_IN_DATABASE) {
-        // Replace module by sites.
-        $apis_changed[$api] = TRUE;
-        $module_exports[$table][$name] = $object;
+    if ($site_exports) {
+      foreach ($site_exports as $name => $object) {
+        $func = em_export($table, 'status callback');
+        if ($func($object) & EM_STATUS_IN_DATABASE) {
+          // Replace module by sites.
+          $apis_changed[$api] = TRUE;
+          $module_exports[$table][$name] = $object;
+        }
       }
+    }
+    else {
+      // If exports are empty, the api exists, but returns nothing. Flag it for deletion.
+      $apis_changed[$api] = TRUE;
     }
   }
   $rewrite = array();
@@ -736,41 +742,46 @@ function em_write_exportables($module, $exportables) {
       if (function_exists($export['pre export'])) {
         $export['pre export']();
       }
+      $code[$api] .= '';
       if (function_exists($export['to hook code callback'])) {
-        // Having their own export function means that we can only export the
-        // whole shebang. Figure out what that means and ask the user if it's
-        // OK.
-        // Get the module's list of objects
-        // check that there's not anyone of those that's not in the set we're exporting
-        $module_exports = em_get_module_exports($module, $table);
-        $extra = array();
-        foreach ($objects as $name => $object) {
-          if (!isset($exportables[$table][$name])) {
-            $extra[] = $name;
+        if (sizeof($objects)) {
+          // Having their own export function means that we can only export the
+          // whole shebang. Figure out what that means and ask the user if it's
+          // OK.
+          // Get the module's list of objects
+          // check that there's not anyone of those that's not in the set we're exporting
+          $module_exports = em_get_module_exports($module, $table);
+          $extra = array();
+          foreach ($objects as $name => $object) {
+            if (!isset($exportables[$table][$name])) {
+              $extra[] = $name;
+            }
           }
-        }
 
-        if (sizeof($extra) > 0) {
-          drush_print(dt('@type defines its own export function, so we have to export all overridden objects.', array('@type' => $table)));
-          if (!drush_confirm(dt('This will also export @objects, continue?', array('@objects' => join(', ', $extra))))) {
-            return drush_set_error('Aborting.');
+          if (sizeof($extra) > 0) {
+            drush_print(dt('@type defines its own export function, so we have to export all overridden objects.', array('@type' => $table)));
+            if (!drush_confirm(dt('This will also export @objects, continue?', array('@objects' => join(', ', $extra))))) {
+              return drush_set_error('Aborting.');
+            }
           }
+        
+          $output = $export['to hook code callback'](array_keys($objects), $module);
+          $code[$api] .= $output;
         }
-
-        $output = $export['to hook code callback'](array_keys($objects), $module);
-        $code[$api] .= $output;
       } else {
-        $output = "/**\n";
-        $output .= " * Implementation of hook_{$export['default hook']}().\n";
-        $output .= " */\n";
-        $output .= "function " . $module . "_{$export['default hook']}() {\n";
-        foreach ($objects as $object) {
-          $output .= $export['export callback']($object, '  '); // if this function does not exist, better to error out than fail silently
-          $output .= "  \${$export['identifier']}s['" . check_plain($object->$export['key']) . "'] = \${$export['identifier']};\n\n";
+        if (sizeof($objects)) {
+          $output = "/**\n";
+          $output .= " * Implementation of hook_{$export['default hook']}().\n";
+          $output .= " */\n";
+          $output .= "function " . $module . "_{$export['default hook']}() {\n";
+          foreach ($objects as $object) {
+            $output .= $export['export callback']($object, '  '); // if this function does not exist, better to error out than fail silently
+            $output .= "  \${$export['identifier']}s['" . check_plain($object->$export['key']) . "'] = \${$export['identifier']};\n\n";
+          }
+          $output .= " return \${$export['identifier']}s;\n";
+          $output .= "}\n";
+          $code[$api] .= $output;
         }
-        $output .= " return \${$export['identifier']}s;\n";
-        $output .= "}\n";
-        $code[$api] .= $output;
       }
     }
   }
@@ -782,14 +793,19 @@ function em_write_exportables($module, $exportables) {
   chdir(drush_cwd());
   // TODO: The api hook and the dependencies.
   foreach ($code as $api => $hook_code) {
-    $file_code = "<?php\n";
-    $file_code .= "// \$Id" . "$\n\n";
-    $file_code .= "/**\n";
-    $file_code .= " * @file\n";
-    $file_code .= " * Bulk export of $api objects exported by Drush em.\n";
-    $file_code .= " */\n\n";
-    $file_code .= $hook_code;
-    em_write($module . '.' . $api . '.inc', $file_code);
+    if ($hook_code) {
+      $file_code = "<?php\n";
+      $file_code .= "// \$Id" . "$\n\n";
+      $file_code .= "/**\n";
+      $file_code .= " * @file\n";
+      $file_code .= " * Bulk export of $api objects exported by Drush em.\n";
+      $file_code .= " */\n\n";
+      $file_code .= $hook_code;
+      em_write($module . '.' . $api . '.inc', $file_code);
+    }
+    else {
+      drush_op('unlink', $module . '.' . $api . '.inc');
+    }
   }
   chdir($old);
   return TRUE;
@@ -832,6 +848,9 @@ function em_get_module_exports_all($module) {
     $exportables = em_get_module_exports($module, $table);
     if ($exportables) {
       $all_exportables[$table] = $exportables;
+    }
+    else {
+      $all_exportables[$table] = array();
     }
   }
   return $all_exportables;
