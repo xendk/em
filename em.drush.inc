@@ -626,14 +626,14 @@ function em_dump() {
   foreach ($reexport as $table => $entries) {
     $module_exports = em_get_module_exports($module, $table);
     // Override or add.
-    $module_exports = array_merge($module_exports,
-                                  em_get_site_exportables($table, $entries));
+    $revert[$table] = em_get_site_exportables($table, $entries);
+    $module_exports = array_merge($module_exports, $revert[$table]);
     $reexport[$table] = $module_exports;
   }
 
   em_write_exportables($module, $reexport);
 
-  drush_op('em_revert_exportables', $reexport);
+  drush_op('em_revert_exportables', $revert);
 
   drush_print('Done.');
 }
@@ -706,6 +706,7 @@ function em_update() {
       $rewrite[$table] = $module_exports[$table];
     }
   }
+
   // Write files.
   em_write_exportables($module, $rewrite);
   drush_print('Updated files');
