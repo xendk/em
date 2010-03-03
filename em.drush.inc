@@ -669,6 +669,10 @@ function em_remove() {
       if ($remove[$table][$name]) {
         unset($module_exports[$table][$name]);
       }
+      else {
+        // Don't bother rewriting files, if we're not messing with it.
+        unset($module_exports[$table]);
+      }
     }
   }
 
