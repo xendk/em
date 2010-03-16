@@ -195,6 +195,22 @@ function em_export($table = NULL, $key = NULL) {
         'delete callback' => 'em_fg_instance_delete',
         'is array' => TRUE,
       );
+
+      if (module_exists('fieldgroup')) {
+        $export_types['field_groups'] = array(
+          'api' => 'field_groups',
+          'identifier' => 'group',
+          'key' => 'name',
+          'list callback' => 'em_fg_get_all_groups',
+          'default hook' => 'field_groups',
+          'load callback' => 'em_fg_load_groups',
+          //'export callback' => '',
+          'to hook code callback' => 'em_fg_groups_to_hook_code',
+          'status callback' => 'em_fg_group_status',
+          // 'delete callback' => 'em_fg_instance_delete',
+          'is array' => TRUE,
+        );
+      }
     }
 
     if (module_exists('ctools')) {
@@ -277,6 +293,21 @@ function em_fg_get_all_instances() {
   return $fields;
 }
 
+function em_fg_get_all_groups() {
+  $groups = array();
+  $all_groups = fieldgroup_groups();
+  foreach ($all_groups as $type => $type_groups) {
+    foreach ($type_groups as $group_name => $group) {
+      $group['fields'] = array_keys($group['fields']);
+      $group['name'] = $type . '-' . $group_name;
+      $groups[$group['name']] = $group;
+    }
+  }
+
+  return $groups;
+}
+
+
 function em_fg_load_gatekeeper($names) {
   $all_fields = em_fg_get_all_gatekeeper();
   $fields = array();
@@ -297,6 +328,17 @@ function em_fg_load_instances($names) {
     }
   }
   return $fields;
+}
+
+function em_fg_load_groups($names) {
+  $all_groups = em_fg_get_all_groups();
+  $groups = array();
+  foreach ($names as $name) {
+    if ($all_groups[$name]) {
+      $groups[$name] = $all_groups[$name];
+    }
+  }
+  return $groups;
 }
 
 function em_fg_gatekeeper_status($field) {
@@ -342,6 +384,25 @@ function em_fg_instance_status($field) {
        return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
   }
+  return EM_STATUS_IN_CODE;
+}
+
+function em_fg_group_status($group) {
+  $type_groups = fieldgroup_groups($group['type_name']);
+  if (!$type_groups[$group['group_name']]) {
+    return EM_STATUS_IN_CODE;
+  }
+  
+  $code_defined = field_gatekeeper_get_field_groups();
+  if (!$code_defined[$group['name']]) {
+    return EM_STATUS_IN_DATABASE;
+  }
+
+  $diffs = _field_gatekeeper_array_rdiff($group, $type_groups[$group['group_name']]);
+  if ($diffs) {
+    return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
+  }
+  
   return EM_STATUS_IN_CODE;
 }
 
@@ -402,6 +463,46 @@ function em_fg_instances_to_hook_code($objects, $module) {
     $instance['locked'] = 1;
 
     $instance = field_gatekeeper_instance_clean($instance);
+    $dump = "  \${$export['identifier']} = ";
+    $dump .= em_var_export($instance, '  ');
+    $dump .= ";\n";
+    $output .= $dump;
+
+    $output .= "  \${$export['identifier']}s['" . check_plain($name) . "'] = \${$export['identifier']};\n\n";
+  }
+  $output .= "  return \${$export['identifier']}s;\n";
+  $output .= "}\n";
+  return $output;
+}
+
+function em_fg_groups_to_hook_code($objects, $module) {
+  drush_print_r($objects);
+  $export = em_export('field_groups');
+  $output = "/**\n";
+  $output .= " * Implementation of hook_{$export['default hook']}().\n";
+  $output .= " */\n";
+  $output .= "function " . $module . "_{$export['default hook']}() {\n";
+
+  foreach ($objects as $name) {
+    list($type, $group_name) = explode('-', $name);
+    if (!$group_name) {
+      continue;
+    }
+
+    $type_groups = fieldgroup_groups($type);
+
+    foreach ($all_groups as $type => $type_groups) {
+    foreach ($type_groups as $group_name => $group) {
+    }
+  }
+    
+    if (!$type_groups[$group_name]) {
+      continue;
+    }
+    $instance = $type_groups[$group_name];
+    $instance['fields'] = array_keys($instance['fields']);
+    $instance['name'] = $instance['type_name'] . '-' . $instance['group_name'];
+    
     $dump = "  \${$export['identifier']} = ";
     $dump .= em_var_export($instance, '  ');
     $dump .= ";\n";
