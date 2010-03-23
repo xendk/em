@@ -303,7 +303,6 @@ function em_fg_get_all_groups() {
       $groups[$group['name']] = $group;
     }
   }
-
   return $groups;
 }
 
@@ -397,8 +396,11 @@ function em_fg_group_status($group) {
   if (!$code_defined[$group['name']]) {
     return EM_STATUS_IN_DATABASE;
   }
+  $db_group = $type_groups[$group['group_name']];
+  $db_group['name'] = $group['type_name'] . '-' . $group['group_name'];
+  $db_group['fields'] = array_keys($db_group['fields']);
 
-  $diffs = _field_gatekeeper_array_rdiff($group, $type_groups[$group['group_name']]);
+  $diffs = _field_gatekeeper_array_rdiff($group, $db_group);
   if ($diffs) {
     return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
   }
@@ -476,7 +478,6 @@ function em_fg_instances_to_hook_code($objects, $module) {
 }
 
 function em_fg_groups_to_hook_code($objects, $module) {
-  drush_print_r($objects);
   $export = em_export('field_groups');
   $output = "/**\n";
   $output .= " * Implementation of hook_{$export['default hook']}().\n";
