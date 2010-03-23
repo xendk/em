@@ -32,15 +32,13 @@ function em_drush_command() {
     // We're skipping the customary drush_ prefix, as it increases the chance
     // of colliding with a hook.
     'callback' => 'em_status',
-    'description' => 'Show exportable status of current module.',
-    'arguments' => array(
-      'name' => 'The name of the field whose instances you wish to compare. Mandatory.',
-    ),
+    'description' => 'Show exportable status of current module, or all modules.',
     'options' => array(
       '-o' => 'Only show overridden.',
+      '-a' => 'Show all modules',
     ),
     'examples' => array(
-      'em status field_teaser' => 'Compare all instances of field_teaser.',
+      'em status' => 'Show status.',
     ),
     // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
   );
@@ -579,33 +577,44 @@ function em_strongarm_delete($export) {
 }
 
 function em_status() {
-  if (!$module = em_get_module()) {
-    return FALSE;
+  $modules = array();
+  if ($module = em_get_module()) {
+    $modules[] = $module;
+  }
+
+  if (empty($modules) or drush_get_option('a', FALSE)) {
+    $modules = module_list();
   }
 
   // Now, find out what exportables that's available.
   $export_schemas = em_export();
   $quick = drush_get_option('o', FALSE);
-  foreach ($export_schemas as $table => $export) {
-    $site_exports = array();
-    $module_exports = em_get_module_exports($module, $table);
-    if (sizeof($module_exports)) {
-      // Now load the same objects from the site.
-      $site_exports = em_get_site_exportables($table, $module_exports);
-      foreach ($site_exports as $name => $export) {
-        $func = em_export($table, 'status callback');
-        $overridden = $func($export) & EM_STATUS_IN_DATABASE;
-        if ($overridden or !$quick) {
-          $output[$table] .= "  " . $name . ': ' .
-            ($overridden ? 'Overridden' : 'Normal') .
-            "\n";
+  foreach ($modules as $module) {
+    $output = array();
+    foreach ($export_schemas as $table => $export) {
+      $site_exports = array();
+      $module_exports = em_get_module_exports($module, $table);
+      if (sizeof($module_exports)) {
+        // Now load the same objects from the site.
+        $site_exports = em_get_site_exportables($table, $module_exports);
+        foreach ($site_exports as $name => $export) {
+          $func = em_export($table, 'status callback');
+          $overridden = $func($export) & EM_STATUS_IN_DATABASE;
+          if ($overridden or !$quick) {
+            $output[$table] .= "  " . $name . ': ' .
+              ($overridden ? 'Overridden' : 'Normal') .
+              "\n";
+          }
         }
       }
     }
-  }
-  foreach ($output as $table => $listing) {
-    drush_print($table . ':');
-    drush_print($listing);
+    if (sizeof($modules) > 1 and sizeof($output)) {
+      drush_print('--- ' . $module . ' ---');
+    }
+    foreach ($output as $table => $listing) {
+      drush_print($table . ':');
+      drush_print($listing);
+    }
   }
 }
 
@@ -892,6 +901,8 @@ function em_write_exportables($module, $exportables) {
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
   $old = getcwd();
+ 
+  // Maybe: $hook_file = drupal_get_path('module', $module) . '/' . $module . '.' . $export['api'] . '.inc';
   chdir(drush_cwd());
   // TODO: The api hook and the dependencies.
   foreach ($code as $api => $hook_code) {
@@ -963,12 +974,8 @@ function em_get_module_exports_all($module) {
  */
 function em_get_module_exports($module, $table) {
   $module_exports = array();
-  // Apparently drush thinks we're in the modules directory, while we're in
-  // fact in the site root. Odd.
   $export = em_export($table);
-  //$old = getcwd();
-  //chdir(drush_cwd());
-  $hook_file = drush_cwd() . "/" . $module . '.' . $export['api'] . '.inc';
+  $hook_file = drupal_get_path('module', $module) . '/' . $module . '.' . $export['api'] . '.inc';
   if (file_exists($hook_file)) {
     require_once($hook_file);
     $hook = $module . "_" . $export['default hook'];
@@ -994,7 +1001,7 @@ function em_get_site_exportables($table, $exportables = NULL) {
   return $site_exports;
 }
 
-function em_get_module() {
+function em_get_module($optional = FALSE) {
   // Find a module.
   // Apparently drush thinks we're in the modules directory, while we're in
   // fact in the site root. Odd.
@@ -1009,7 +1016,7 @@ function em_get_module() {
 
   if (sizeof($candidates) == 1) {
     return $candidates[0];
-  } else {
+  } elseif (!$optional) {
     // TODO: if more than one, list and provide argument.
     return drush_set_error(dt('No module.'));
   }
