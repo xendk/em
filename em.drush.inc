@@ -28,7 +28,7 @@ define('EM_STATUS_IN_CODE', 0x01);
 define('EM_STATUS_IN_DATABASE', 0x02);
 
 function em_drush_command() {
-  $items['em status'] = array(
+  $items['em-status'] = array(
     // We're skipping the customary drush_ prefix, as it increases the chance
     // of colliding with a hook.
     'callback' => 'em_status',
@@ -43,7 +43,7 @@ function em_drush_command() {
     // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
   );
 
-  $items['em revert'] = array(
+  $items['em-revert'] = array(
     'callback' => 'em_revert',
     'description' => 'Revert an exportable',
     'arguments' => array(
@@ -54,7 +54,7 @@ function em_drush_command() {
     ),
   );
 
-  $items['em dump'] = array(
+  $items['em-dump'] = array(
     'callback' => 'em_dump',
     'description' => 'Dump an exportable to the current module',
     'arguments' => array(
@@ -65,7 +65,7 @@ function em_drush_command() {
     ),
   );
 
-  $items['em remove'] = array(
+  $items['em-remove'] = array(
     'callback' => 'em_remove',
     'description' => 'Remove an exportable from the current module',
     'arguments' => array(
@@ -76,12 +76,12 @@ function em_drush_command() {
     ),
   );
 
-  $items['em update'] = array(
+  $items['em-update'] = array(
     'callback' => 'em_update',
     'description' => 'Update module exportables from site',
   );
 
-  $items['em list'] = array(
+  $items['em-list'] = array(
     'callback' => 'em_list',
     'description' => 'List site exportables',
   );
