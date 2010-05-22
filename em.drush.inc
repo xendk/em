@@ -1,5 +1,7 @@
 <?php
 
+// $Id$
+
 /*
 em status: * bedre listing?
 list hvilke der er overridden
@@ -84,7 +86,15 @@ function em_drush_command() {
   $items['em-list'] = array(
     'callback' => 'em_list',
     'description' => 'List site exportables',
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
+
   );
+
+  $items['em-debug'] = array(
+    'callback' => 'em_debug',
+    'description' => 'List site exportables',
+  );
+
   return $items;
 }
 
@@ -122,122 +132,35 @@ function em_tables() {
   return $tables;
 }
 
+function em_debug() {
+  drush_print_r(array_diff_assoc(em_export(), em_export_new()));
+  // drush_print_r(em_export());
+}
+
 /**
- * Defines out exportable types.
+ * Return information about known exportable types.
+ *
+ * @todo is $table and/or $key really useful?
  */
 function em_export($table = NULL, $key = NULL) {
   static $export_types = NULL;
-  static $overrides = array(
-    'page_manager_pages' => array(
-      'pre export' => 'page_manager_get_tasks',
-      'delete callback' => 'em_delete_page_manager_pages',
-    ),
-    'page_manager_handlers' => array(
-      'delete callback' => 'page_manager_delete_task_handler',
-    ),
-    'panels_mini' => array(
-      'delete callback' => 'panels_mini_delete',
-    ),
-    'variable' => array(
-      // Stongarm 2.0 RC1 defines a non-existent export callback.
-      'export callback' => 'em_export_strongarm',
-      'status callback' => 'em_strongarm_status',
-      'delete callback' => 'em_strongarm_delete',
-    ),
-  );
 
-  if (!$export_types) {
-    // TODO: predefined non-ctools types.
-    $export_types = array();
-    if (module_exists('views')) {
-      views_include('view');
-      $export_types['views'] = array(
-        'api' => 'views_default',
-        'identifier' => 'view',
-        'key' => 'name',
-        'list callback' => 'views_get_all_views',
-        'default hook' => 'views_default_views',
-        'load callback' => 'em_get_views',
-        // TODO: views_view_exportables might be more right.
-        'export callback' => 'em_export_view',
-        'status callback' => 'em_view_status',
-        'delete callback' => 'em_view_delete',
-      );
-    }
-
-    if (module_exists('field_gatekeeper')) {
-      $export_types['field_gatekeeper'] = array(
-        'api' => 'field_gatekeeper',
-        'identifier' => 'field',
-        'key' => 'field_name',
-        'list callback' => 'em_fg_get_all_gatekeeper',
-        'default hook' => 'field_gatekeeper',
-        'load callback' => 'em_fg_load_gatekeeper',
-        //'export callback' => '',
-        'to hook code callback' => 'em_fg_gatekeeper_to_hook_code',
-        'status callback' => 'em_fg_gatekeeper_status',
-        'delete callback' => 'em_fg_gatekeeper_delete',
-        'is array' => TRUE,
-      );
-
-      $export_types['field_instances'] = array(
-        'api' => 'field_instances',
-        'identifier' => 'field',
-        'key' => 'name',
-        'list callback' => 'em_fg_get_all_instances',
-        'default hook' => 'field_instances',
-        'load callback' => 'em_fg_load_instances',
-        //'export callback' => '',
-        'to hook code callback' => 'em_fg_instances_to_hook_code',
-        'status callback' => 'em_fg_instance_status',
-        'delete callback' => 'em_fg_instance_delete',
-        'is array' => TRUE,
-      );
-
-      if (module_exists('fieldgroup')) {
-        $export_types['field_groups'] = array(
-          'api' => 'field_groups',
-          'identifier' => 'group',
-          'key' => 'name',
-          'list callback' => 'em_fg_get_all_groups',
-          'default hook' => 'field_groups',
-          'load callback' => 'em_fg_load_groups',
-          //'export callback' => '',
-          'to hook code callback' => 'em_fg_groups_to_hook_code',
-          'status callback' => 'em_fg_group_status',
-          // 'delete callback' => 'em_fg_instance_delete',
-          'is array' => TRUE,
-        );
+  if (!is_array($export_types)) {
+    // Load include files that gaffas em together with assorted modules that
+    // doesn't support it directly.
+    $include_dir = dirname(__FILE__) . '/modules/';
+    foreach (module_list() as $module) {
+      $inc_file = $include_dir . $module . '.inc';
+      if (file_exists($inc_file)) {
+        require_once($inc_file);
       }
     }
 
-    if (module_exists('ctools')) {
-      // Find out what ctools exportables that's available.
-      ctools_include('export');
-      $schemas = ctools_export_get_schemas(TRUE);
-
-      foreach ($schemas as $etable => $schema) {
-        if ($schema['export']['api']) {
-          $export_types[$etable] = array(
-            'api' => $schema['export']['api']['api'],
-            'identifier' => $schema['export']['identifier'],
-            'key' => $schema['export']['key'],
-            'export callback' => $schema['export']['export callback'],
-            'default hook' => $schema['export']['default hook'],
-            'list callback' => $schema['export']['list callback'],
-            'to hook code callback' => $schema['export']['to hook code callback'],
-            'load callback' => 'ctools_export_load_object',
-            'load arguments' => array($etable, 'names'),
-            'status callback' => 'em_ctools_status',
-          );
-          if ($overrides[$etable]) {
-             $export_types[$etable]= $overrides[$etable] + $export_types[$etable];
-          }
-        }
-      }
-    }
+    // Collect information.
+    $export_types = module_invoke_all('em_exportables');
+    drupal_alter('em_exportables', $export_types);
   }
-
+  
   if ($key) {
     return $export_types[$table][$key];
   } elseif ($table) {
@@ -246,335 +169,6 @@ function em_export($table = NULL, $key = NULL) {
   return $export_types;
 }
 
-function em_delete_page_manager_pages($object) {
-  static $loaded;
-  // For some reason, the right task include might not be loaded, so we tickle it here.
-  if (!$loaded) {
-    page_manager_get_tasks();
-    $loaded = TRUE;
-  }
-  page_manager_page_delete($object);
-  return;
-}
-
-function em_fg_get_all_gatekeeper() {
-  module_load_include('inc', 'content', '/includes/content.crud');
-  $fields = array();
-  // Load fields in DB from CCK.
-  $all_fields = content_field_instance_read(NULL, TRUE);
-  foreach ($all_fields as $field) {
-    $fields[$field['field_name']] = field_gatekeeper_base_clean($field);
-  }
-  // Overlay module defined.
-  $gw_fields = field_gatekeeper_get_field_gatekeeper();
-  foreach ($gw_fields as $field) {
-    $fields[$field['field_name']] = field_gatekeeper_base_clean($field);
-  }
-  return $fields;
-}
-
-function em_fg_get_all_instances() {
-  module_load_include('inc', 'content', '/includes/content.crud');
-  $fields = array();
-  // Load fields in DB from CCK.
-  $all_fields = content_field_instance_read(NULL, TRUE);
-  foreach ($all_fields as $field) {
-    $field = field_gatekeeper_instance_clean($field);
-    $field['name'] = $field['type_name'] . '-' . $field['field_name'];
-    $fields[$field['name']] = $field;
-  }
-  // Overlay module defined.
-  $gw_fields = field_gatekeeper_get_field_instances();
-  foreach ($gw_fields as $field) {
-    $fields[$field['name']] = field_gatekeeper_instance_clean($field);
-  }
-  return $fields;
-}
-
-function em_fg_get_all_groups() {
-  $groups = array();
-  $all_groups = fieldgroup_groups();
-  foreach ($all_groups as $type => $type_groups) {
-    foreach ($type_groups as $group_name => $group) {
-      $group['fields'] = array_keys($group['fields']);
-      $group['name'] = $type . '-' . $group_name;
-      $groups[$group['name']] = $group;
-    }
-  }
-  return $groups;
-}
-
-
-function em_fg_load_gatekeeper($names) {
-  $all_fields = em_fg_get_all_gatekeeper();
-  $fields = array();
-  foreach ($names as $name) {
-    if ($all_fields[$name]) {
-      $fields[$name] = $all_fields[$name];
-    }
-  }
-  return $fields;
-}
-
-function em_fg_load_instances($names) {
-  $all_fields = em_fg_get_all_instances();
-  $fields = array();
-  foreach ($names as $name) {
-    if ($all_fields[$name]) {
-      $fields[$name] = $all_fields[$name];
-    }
-  }
-  return $fields;
-}
-
-function em_fg_load_groups($names) {
-  $all_groups = em_fg_get_all_groups();
-  $groups = array();
-  foreach ($names as $name) {
-    if ($all_groups[$name]) {
-      $groups[$name] = $all_groups[$name];
-    }
-  }
-  return $groups;
-}
-
-function em_fg_gatekeeper_status($field) {
-  module_load_include('inc', 'content', '/includes/content.crud');
-  // load all instances of the field
-  $code_defined = field_gatekeeper_get_field_gatekeeper();
-  if (!$code_defined[$field['field_name']]) {
-    return EM_STATUS_IN_DATABASE;
-  }
-
-  $options = array('field_name' => $field['field_name']);
-  $instances = content_field_instance_read($options);
-
-  foreach ($instances as $instance) {
-    $instance['locked'] = '1';
-    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
-    if ($diffs) {
-      return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
-    }
-  }
-  return EM_STATUS_IN_CODE;
-}
-
-function em_fg_instance_status($field) {
-  module_load_include('inc', 'content', '/includes/content.crud');
-  // load instance of the field
-  $options = array('field_name' => $field['field_name'], 'type_name' => $field['type_name']);
-
-  $code_defined = field_gatekeeper_get_field_instances();
-  if (!$code_defined[$field['name']]) {
-    return EM_STATUS_IN_DATABASE;
-  }
-
-  $instances = content_field_instance_read($options);
-  if (!$instances) {
-    return EM_STATUS_IN_CODE;
-  }
-
-  foreach ($instances as $instance) {
-    $instance['locked'] = '1';
-    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_instance_clean($instance));
-    if ($diffs) {
-       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
-    }
-  }
-  return EM_STATUS_IN_CODE;
-}
-
-function em_fg_group_status($group) {
-  $type_groups = fieldgroup_groups($group['type_name']);
-  if (!$type_groups[$group['group_name']]) {
-    return EM_STATUS_IN_CODE;
-  }
-  
-  $code_defined = field_gatekeeper_get_field_groups();
-  if (!$code_defined[$group['name']]) {
-    return EM_STATUS_IN_DATABASE;
-  }
-  $db_group = $type_groups[$group['group_name']];
-  $db_group['name'] = $group['type_name'] . '-' . $group['group_name'];
-  $db_group['fields'] = array_keys($db_group['fields']);
-
-  $diffs = _field_gatekeeper_array_rdiff($group, $db_group);
-  if ($diffs) {
-    return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
-  }
-  
-  return EM_STATUS_IN_CODE;
-}
-
-function em_fg_gatekeeper_delete($field) {
-  drush_print(dt('Reverting !field_name will also revert all instances of the field.', array('!field_name' => $field['field_name'])));
-  if(!drush_confirm(dt('Do you want to do this?'))) {
-    return;
-  }
-  field_gatekeeper($field);
-}
-
-
-function em_fg_instance_delete($field) {
-  field_gatekeeper($field);
-}
-
-function em_fg_gatekeeper_to_hook_code($objects, $module) {
-  $export = em_export('field_gatekeeper');
-  $output = "/**\n";
-  $output .= " * Implementation of hook_{$export['default hook']}().\n";
-  $output .= " */\n";
-  $output .= "function " . $module . "_{$export['default hook']}() {\n";
-  foreach ($objects as $name) {
-    module_load_include('inc', 'content', '/includes/content.crud');
-    $instances = content_field_instance_read(array('field_name' => $name));
-    $instance = $instances[0];
-    $instance['locked'] = 1;
-
-    $instance = field_gatekeeper_base_clean($instance);
-    $dump = "  \${$export['identifier']} = ";
-    $dump .= em_var_export($instance, '  ');
-    $dump .= ";\n";
-    $output .= $dump;
-
-    $output .= "  \${$export['identifier']}s['" . check_plain($instance['field_name']) . "'] = \${$export['identifier']};\n\n";
-  }
-  $output .= "  return \${$export['identifier']}s;\n";
-  $output .= "}\n";
-  return $output;
-};
-
-function em_fg_instances_to_hook_code($objects, $module) {
-  $export = em_export('field_instances');
-  $output = "/**\n";
-  $output .= " * Implementation of hook_{$export['default hook']}().\n";
-  $output .= " */\n";
-  $output .= "function " . $module . "_{$export['default hook']}() {\n";
-
-  foreach ($objects as $name) {
-    list($type, $field) = explode('-', $name);
-    if (!$field) {
-      continue;
-    }
-    module_load_include('inc', 'content', '/includes/content.crud');
-    $instances = content_field_instance_read(array('field_name' => $field,
-                                                   'type_name' => $type));
-    $instance = $instances[0];
-    $instance['locked'] = 1;
-
-    $instance = field_gatekeeper_instance_clean($instance);
-    $dump = "  \${$export['identifier']} = ";
-    $dump .= em_var_export($instance, '  ');
-    $dump .= ";\n";
-    $output .= $dump;
-
-    $output .= "  \${$export['identifier']}s['" . check_plain($name) . "'] = \${$export['identifier']};\n\n";
-  }
-  $output .= "  return \${$export['identifier']}s;\n";
-  $output .= "}\n";
-  return $output;
-}
-
-function em_fg_groups_to_hook_code($objects, $module) {
-  $export = em_export('field_groups');
-  $output = "/**\n";
-  $output .= " * Implementation of hook_{$export['default hook']}().\n";
-  $output .= " */\n";
-  $output .= "function " . $module . "_{$export['default hook']}() {\n";
-
-  foreach ($objects as $name) {
-    list($type, $group_name) = explode('-', $name);
-    if (!$group_name) {
-      continue;
-    }
-
-    $type_groups = fieldgroup_groups($type);
-
-    foreach ($all_groups as $type => $type_groups) {
-    foreach ($type_groups as $group_name => $group) {
-    }
-  }
-    
-    if (!$type_groups[$group_name]) {
-      continue;
-    }
-    $instance = $type_groups[$group_name];
-    $instance['fields'] = array_keys($instance['fields']);
-    $instance['name'] = $instance['type_name'] . '-' . $instance['group_name'];
-    
-    $dump = "  \${$export['identifier']} = ";
-    $dump .= em_var_export($instance, '  ');
-    $dump .= ";\n";
-    $output .= $dump;
-
-    $output .= "  \${$export['identifier']}s['" . check_plain($name) . "'] = \${$export['identifier']};\n\n";
-  }
-  $output .= "  return \${$export['identifier']}s;\n";
-  $output .= "}\n";
-  return $output;
-}
-
-
-/**
- * Helper function to load multiple views.
- */
-function em_get_views($names) {
-  $res = array();
-  foreach ($names as $name) {
-    $view = views_get_view($name);
-    $res[$view->name] = $view;
-  }
-  return $res;
-}
-
-/**
- * Helper function to export a view.
- */
-function em_export_view($view, $indent) {
-  return $view->export($indent);
-}
-
-function em_export_strongarm($variable, $indent = '') {
-  return ctools_export_object('variable', $variable, $indent);
-}
-
-function em_view_status($export) {
-  if ($export->type == t('Overridden')) {
-    return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
-  } elseif ($export->type == t('Standard')) {
-    return EM_STATUS_IN_CODE;
-  }
-  // t('Normal')
-  return EM_STATUS_IN_DATABASE;
-}
-
-function em_ctools_status($export) {
-  $status = 0;
-  if ($export->export_type & EXPORT_IN_CODE) {
-    $status = EM_STATUS_IN_CODE;
-  }
-  if ($export->export_type & EXPORT_IN_DATABASE) {
-    $status = $status | EM_STATUS_IN_DATABASE;
-  }
-  return $status;
-}
-
-function em_strongarm_status($export) {
-  // Due to the nature of strongarm, exports are never overridden.
-  return EM_STATUS_IN_CODE;
-}
-
-/**
- * Helper function to delete view.
- */
-function em_view_delete($view) {
-  $view->delete();
-}
-
-function em_strongarm_delete($export) {
-  // As strongarm can't be overridden, reverting is a noop.
-  return;
-}
 
 function em_status() {
   $modules = array();
@@ -1035,7 +629,7 @@ function em_var_export($var, $prefix = '', $init = TRUE) {
     else {
       $output = "array(\n";
       foreach ($var as $key => $value) {
-        $output .= "  '$key' => " . views_var_export($value, '  ', FALSE) . ",\n";
+        $output .= "  '$key' => " . em_var_export($value, '  ', FALSE) . ",\n";
       }
       $output .= ')';
     }
