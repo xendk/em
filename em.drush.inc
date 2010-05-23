@@ -246,7 +246,7 @@ function em_status() {
         // Now load the same objects from the site.
         $site_exports = em_get_site_exportables($table, $module_exports);
         foreach ($site_exports as $name => $export) {
-          if (em_is_in_database($table, $export) or !$quick) {
+          if (($overridden = em_is_in_database($table, $export)) or !$quick) {
             $output[$table] .= "  " . $name . ': ' .
               ($overridden ? 'Overridden' : 'Normal') .
               "\n";
@@ -291,6 +291,7 @@ function em_revert() {
     }
   }
 
+  $multiple = FALSE;
   // Filter to specified.
   foreach ($arguments as $arg) {
     if ($arg == 'all') {
@@ -301,11 +302,51 @@ function em_revert() {
     if (!$name) {
       return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
     } else {
-      if ($resetables[$table][$name]) {
-        $reset[$table][$name] = $resetables[$table][$name];
-      } else {
-        return drush_set_error(dt('Unknown exportable or not overridden: @name.', array('@name' => $arg)));
+      $table_candidates = em_match($table, array_keys($resetables), 'export');
+      if ($table_candidates === FALSE) {
+        return;
       }
+      if ($table_candidates) {
+        if (sizeof($table_candidates) > 1) {
+          $multiple = TRUE;
+        }
+        foreach ($table_candidates as $table_candidate) {
+          $export_candidates = em_match($name, array_keys($resetables[$table_candidate]), $table_candidate);
+          // Only error out if the table wasn't matched by pattern.
+          if ($export_candidates === FALSE and sizeof($table_candidate) == 1) {
+            return;
+          }
+          elseif ($export_candidates) {
+            if (sizeof($export_candidates) > 1) {
+              $multiple = TRUE;
+            }
+            foreach ($export_candidates as $export_candidate) {
+              $reset[$table_candidate][$export_candidate] = $resetables[$table_candidate][$export_candidate];
+            }
+          }
+          elseif (sizeof($table_candidate) == 1) {
+            return drush_set_error(dt("@type '@entry' not overridden.",
+                array('@type' => $table, '@entry' => $entry)));
+          }
+        }
+      }
+      else {
+        return drush_set_error(dt('Unknown export @type or none overridden.', array('@type' => $table)));
+      }
+    }
+  }
+
+  drush_print("Will reset:");
+  foreach ($reset as $table => $entries) {
+    $names = array();
+    foreach ($entries as $name => $dummy) {
+      $names[] = $name;
+    }
+    drush_print($table . ':' . join(', ', $names));
+  }
+  if ($multiple) {
+    if (!drush_confirm("Are you sure you want to do this?")) {
+      return;
     }
   }
 

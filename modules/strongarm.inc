@@ -33,14 +33,28 @@ function em_export_strongarm($variable, $indent = '') {
 }
 
 function em_strongarm_status($export) {
-  // Due to the nature of strongarm, exports are never overridden.
-  // TODO: But really, they are, in some sense. Look into this.
+  global $conf;
+  if ($export->export_type & EXPORT_IN_CODE) {
+    $default = ctools_get_default_object('variable', $export->name);
+    if (!$default) {
+      return EM_STATUS_IN_DATABASE;
+    }
+
+    // If variable value does not match global $conf, this value has been
+    // hardcoded (e.g. in settings.php) and has been allowed to pass
+    // through. It cannot be reverted.
+    if ($conf[$export->name] !== $export->value) {
+      return EM_STATUS_IN_CODE;
+    }
+    else {
+      return ($export->value == $default->value) ? EM_STATUS_IN_CODE : (EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE);
+    }
+  }
   return EM_STATUS_IN_CODE;
 }
 
 function em_strongarm_delete($export) {
-  // As strongarm can't be overridden, reverting is a noop.
-  // TODO: variable_del is how to revert.
+  variable_del($export->name);
   return;
 }
 
