@@ -132,19 +132,30 @@ function em_tables() {
   return $tables;
 }
 
-/**
- * Returns an array of the items in $haystack, that contains the $string as a
- * substring, or a one element array, if the $string matches an item in
- * $haystack exactly.
- */
-function em_substring($string, $haystack) {
+function em_match($string, $haystack, $type) {
   if ($haystack[$string]) {
     return array($string);
   }
   $candidates = array();
-  foreach ($haystack as $hay) {
-    if (strpos($hay, $string) !== FALSE) {
-      $candidates[] = $hay;
+  if (strpos($string, '*') !== FALSE) {
+    // Pattern matching.
+    $string = strtr($string, array('*' => '.*'));
+    foreach ($haystack as $hay) {
+      if (preg_match('{' . $string . '}', $hay)) {
+        $candidates[] = $hay;
+      }
+    }
+  }
+  else {
+    // Substring matching.
+    foreach ($haystack as $hay) {
+      if (strpos($hay, $string) !== FALSE) {
+        $candidates[] = $hay;
+      }
+    }
+    if (sizeof($candidates) > 1) {
+      return drush_set_error(dt('Ambiguous @type @abbrev. Possible exports: @exports',
+          array('@type' => $type, '@abbrev' => $string, '@exports' => join(', ', $candidates))));
     }
   }
   return $candidates;
@@ -162,16 +173,17 @@ function em_debug($string) {
     if (!$name) {
       return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
     }
-    $table = em_table($table_abbrev, TRUE);
-    if ($table === FALSE) {
-      return drush_set_error(dt('Unknown type @type.', array('@type' => $table)));
+    $candidates = em_match($table_abbrev, array_keys(em_export()), 'export');
+    if ($candidates === FALSE) {
+      return FALSE;
     }
-    if (is_array($table)) {
-      return drush_set_error(dt('Ambiguous export @abbrev. Possible exports: @exports',
-          array('@abbrev' => $table_abbrev, '@exports' => join(', ', $table))));
+    if ($candidates) {
+      foreach ($candidates as $table) {
+        $dump[$table][] = $name;
+      }
     }
     else {
-      $dump[$table][] = $name;
+      return drush_set_error(dt('Unknown export @type.', array('@type' => $table_abbrev)));
     }
   }
 
@@ -329,22 +341,27 @@ function em_dump() {
     return drush_set_error(dt('No exportables specified.'));
   }
 
+  $pattern_tables = array();
   foreach ($arguments as $arg) {
     list($table_abbrev, $name) = explode(':', $arg, 2);
     if (!$name) {
       return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
     }
-    $candidates = em_substring($table_abbrev, array_keys(em_export()));
-    switch (sizeof($candidates)) {
-      case 0:
-        return drush_set_error(dt('Unknown type @type.', array('@type' => $table_abbrev)));
-        break;
-      case 1:
-        $dump[$candidates[0]][] = $name;
-        break;
-      default:
-        return drush_set_error(dt('Ambiguous export @abbrev. Possible exports: @exports',
-            array('@abbrev' => $table_abbrev, '@exports' => join(', ', $candidates))));
+    $candidates = em_match($table_abbrev, array_keys(em_export()), 'export');
+    if ($candidates === FALSE) {
+      return;
+    }
+    if ($candidates) {
+      foreach ($candidates as $table) {
+        $dump[$table][] = $name;
+      }
+      if (sizeof($candidates) > 1) {
+        // If more than one result, we used patterns.
+        $pattern_tables += $candidates;
+      }
+    }
+    else {
+      return drush_set_error(dt('Unknown export @type.', array('@type' => $table_abbrev)));
     }
   }
 
@@ -353,19 +370,19 @@ function em_dump() {
     $export = em_export($table);
     $site_exportables = em_get_site_exportables($table);
     foreach ($entries as $entry) {
-      $candidates = em_substring($entry, array_keys($site_exportables));
-      switch (sizeof($candidates)) {
-        case 0:
-          return drush_set_error(dt("Unknown @type '@entry'.",
-              array('@type' => $table, '@entry' => $entry)));
-          break;
-        case 1:
-          $entry = $candidates[0];
+      $candidates = em_match($entry, array_keys($site_exportables), $table);
+      if ($candidates === FALSE) {
+        return;
+      }
+      if ($candidates) {
+        foreach ($candidates as $entry) {
           $reexport[$table][$entry] = $entry;
-          break;
-        default:
-          return drush_set_error(dt('Ambiguous @type @abbrev. Candidates: @candidates',
-              array('@type' => $table, '@abbrev' => $entry, '@candidates' => join(', ', $candidates))));
+        }
+      }
+      elseif (!in_array($table, $pattern_tables)) {
+        // Return an error, unless the table was specified by pattern.
+        return drush_set_error(dt("Unknown @type '@entry'.",
+            array('@type' => $table, '@entry' => $entry)));
       }
     }
     // Take API into account. hook_default_page_manager_handlers and
