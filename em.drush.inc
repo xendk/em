@@ -118,20 +118,6 @@ function em_drush_help($section) {
   }
 }
 
-/**
- * Defines aliases for exportable types.
- * TODO: Actually use this.
- */
-function em_tables() {
-  static $tables;
-  if (!$tables) {
-    $tables = array(
-      'pages' => 'page_manager_pages',
-    );
-  }
-  return $tables;
-}
-
 function em_match($string, $haystack, $type) {
   if ($haystack[$string]) {
     return array($string);
@@ -364,7 +350,10 @@ function em_revert() {
   // Filter to specified.
   $multiple = FALSE;
   $reset = em_filter_exportables($arguments, $resetables, $multiple);
-  
+  if ($reset === FALSE) {
+    return;
+  }
+
   drush_print("Will reset:");
   foreach ($reset as $table => $entries) {
     $names = array();
@@ -416,21 +405,14 @@ function em_dump() {
     $site_exportables[$table] = em_get_site_exportables($table);
   }
   $reexport = em_filter_exportables($arguments, $site_exportables, $dummy);
+  if ($reexport === FALSE) {
+    return;
+  }
 
   // Take API into account. hook_default_page_manager_handlers and
   // hook_default_page_manager_pages uses the same file.
-  $all_exportables = em_export();
-  foreach ($reexport as $table => $entries) {
-    $export = em_export($table);
-    foreach ($all_exportables as $other_table => $other_export) {
-      if ($export['api'] == $other_export['api'] and !$reexport[$other_table]) {
-        // Add in other exportables that uses the same API.  We just set it
-        // to an empty array, as we add in existing exportables later.
-        $reexport[$other_table] = array();
-      }
-    }
-  }
-
+  $reexport += em_filter_exportables_api(em_exportables_apis($reexport), $site_exportables);
+  
   // Now, add in the existing ones.
   foreach ($reexport as $table => $entries) {
     $module_exports = em_get_module_exports($module, $table);
@@ -440,9 +422,6 @@ function em_dump() {
     $reexport[$table] = $module_exports;
   }
 
-  drush_print_r($reexport);
-  return;
-  
   em_write_exportables($module, $reexport);
 
   drush_op('em_revert_exportables', $revert);
@@ -467,6 +446,9 @@ function em_remove() {
 
   $exports = em_export();
   $removed = em_filter_exportables($arguments, $module_exports, $dummy);
+  if ($removed === FALSE) {
+    return;
+  }
 
   // Filter down to exports sharing api with the removed.
   $new_module_exports = em_filter_exportables_api(em_exportables_apis($removed), $module_exports);
