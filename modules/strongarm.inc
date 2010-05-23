@@ -18,6 +18,7 @@ function strongarm_em_exportables_alter($export_types) {
       'export callback' => 'em_export_strongarm',
       'status callback' => 'em_strongarm_status',
       'delete callback' => 'em_strongarm_delete',
+      'list callback' => 'em_strongarm_list',
     ),
   );
   foreach ($overrides as $name => $override) {
@@ -39,4 +40,15 @@ function em_strongarm_status($export) {
 function em_strongarm_delete($export) {
   // As strongarm can't be overridden, reverting is a noop.
   return;
+}
+
+/**
+ * Returns an empty listing of all variables.
+ *
+ * Really it should return a list of all existing variables, but we don't want
+ * a full variable listing in em-list, and the other em functions doesn't care.
+ * This might change.
+ */
+function em_strongarm_list() {
+  return array();
 }

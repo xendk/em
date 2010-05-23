@@ -586,8 +586,14 @@ function em_get_site_exportables($table, $exportables = NULL) {
     $exportables = $export['list callback']();
   }
   $args = $export['load arguments'];
-  $args[] = array_keys($exportables);
-  $site_exports = call_user_func_array($export['load callback'], $args);
+  if (sizeof($exportables)) {
+    $args[] = array_keys($exportables);
+    $site_exports = call_user_func_array($export['load callback'], $args);
+  }
+  else {
+    // No exportables found.
+    $site_exports = array();
+  }
   return $site_exports;
 }
 
