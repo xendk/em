@@ -161,6 +161,57 @@ function em_match($string, $haystack, $type) {
   return $candidates;
 }
 
+function em_filter_exportables($patterns, &$exportables, &$matched) {
+  $matched_exports = array();
+  if ($patterns[0] == 'all') {
+    $matched_exports = $exportables;
+    $exportables = array();
+    return $matched_exports;
+  }
+  // Filter to specified.
+  foreach ($patterns as $pattern) {
+    list($table_pattern, $name_pattern) = explode(':', $pattern, 2);
+    if (!$name_pattern) {
+      return drush_set_error(dt('Malformed pattern @pattern.', array('@pattern' => $pattern)));
+    } else {
+      $table_candidates = em_match($table_pattern, array_keys($exportables), 'export');
+      if ($table_candidates === FALSE) {
+        return;
+      }
+      if ($table_candidates) {
+        if (sizeof($table_candidates) > 1) {
+          $matched = TRUE;
+        }
+        foreach ($table_candidates as $table_candidate) {
+          $export_candidates = em_match($name_pattern, array_keys($exportables[$table_candidate]), $table_candidate);
+          // Only error out if the table wasn't matched by pattern.
+          if ($export_candidates === FALSE and sizeof($table_candidates) == 1) {
+            return;
+          }
+          elseif ($export_candidates) {
+            $matched_exports[$table_candidate] = array();
+            if (sizeof($export_candidates) > 1) {
+              $matched = TRUE;
+            }
+            foreach ($export_candidates as $export_candidate) {
+              $matched_exports[$table_candidate][$export_candidate] = $exportables[$table_candidate][$export_candidate];
+              unset($exportables[$table_candidate][$export_candidate]);
+            }
+          }
+          elseif (sizeof($table_candidates) == 1) {
+            return drush_set_error(dt("No @type '@entry'.",
+                array('@type' => $table_candidate, '@entry' => $name_pattern)));
+          }
+        }
+      }
+      else {
+        return drush_set_error(dt('No export @type.', array('@type' => $table_pattern)));
+      }
+    }
+  }
+  return $matched_exports;
+}
+
 
 function em_debug($string) {
   $arguments = func_get_args();
@@ -291,51 +342,10 @@ function em_revert() {
     }
   }
 
-  $multiple = FALSE;
   // Filter to specified.
-  foreach ($arguments as $arg) {
-    if ($arg == 'all') {
-      $reset = $resetables;
-      break;
-    }
-    list($table, $name) = explode(':', $arg, 2);
-    if (!$name) {
-      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
-    } else {
-      $table_candidates = em_match($table, array_keys($resetables), 'export');
-      if ($table_candidates === FALSE) {
-        return;
-      }
-      if ($table_candidates) {
-        if (sizeof($table_candidates) > 1) {
-          $multiple = TRUE;
-        }
-        foreach ($table_candidates as $table_candidate) {
-          $export_candidates = em_match($name, array_keys($resetables[$table_candidate]), $table_candidate);
-          // Only error out if the table wasn't matched by pattern.
-          if ($export_candidates === FALSE and sizeof($table_candidate) == 1) {
-            return;
-          }
-          elseif ($export_candidates) {
-            if (sizeof($export_candidates) > 1) {
-              $multiple = TRUE;
-            }
-            foreach ($export_candidates as $export_candidate) {
-              $reset[$table_candidate][$export_candidate] = $resetables[$table_candidate][$export_candidate];
-            }
-          }
-          elseif (sizeof($table_candidate) == 1) {
-            return drush_set_error(dt("@type '@entry' not overridden.",
-                array('@type' => $table, '@entry' => $entry)));
-          }
-        }
-      }
-      else {
-        return drush_set_error(dt('Unknown export @type or none overridden.', array('@type' => $table)));
-      }
-    }
-  }
-
+  $multiple = FALSE;
+  $reset = em_filter_exportables($arguments, $resetables, $multiple);
+  
   drush_print("Will reset:");
   foreach ($reset as $table => $entries) {
     $names = array();
@@ -382,55 +392,19 @@ function em_dump() {
     return drush_set_error(dt('No exportables specified.'));
   }
 
-  $pattern_tables = array();
-  foreach ($arguments as $arg) {
-    list($table_abbrev, $name) = explode(':', $arg, 2);
-    if (!$name) {
-      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
-    }
-    $candidates = em_match($table_abbrev, array_keys(em_export()), 'export');
-    if ($candidates === FALSE) {
-      return;
-    }
-    if ($candidates) {
-      foreach ($candidates as $table) {
-        $dump[$table][] = $name;
-      }
-      if (sizeof($candidates) > 1) {
-        // If more than one result, we used patterns.
-        $pattern_tables += $candidates;
-      }
-    }
-    else {
-      return drush_set_error(dt('Unknown export @type.', array('@type' => $table_abbrev)));
-    }
+  $site_exportables = array();
+  foreach (em_export() as $table => $export) {
+    $site_exportables[$table] = em_get_site_exportables($table);
   }
+  $reexport = em_filter_exportables($arguments, $site_exportables, $dummy);
 
-  $reexport = array();
-  foreach ($dump as $table => $entries) {
+  // Take API into account. hook_default_page_manager_handlers and
+  // hook_default_page_manager_pages uses the same file.
+  $all_exportables = em_export();
+  foreach ($reexport as $table => $entries) {
     $export = em_export($table);
-    $site_exportables = em_get_site_exportables($table);
-    foreach ($entries as $entry) {
-      $candidates = em_match($entry, array_keys($site_exportables), $table);
-      if ($candidates === FALSE) {
-        return;
-      }
-      if ($candidates) {
-        foreach ($candidates as $entry) {
-          $reexport[$table][$entry] = $entry;
-        }
-      }
-      elseif (!in_array($table, $pattern_tables)) {
-        // Return an error, unless the table was specified by pattern.
-        return drush_set_error(dt("Unknown @type '@entry'.",
-            array('@type' => $table, '@entry' => $entry)));
-      }
-    }
-    // Take API into account. hook_default_page_manager_handlers and
-    // hook_default_page_manager_pages uses the same file.
-    $all_exportables = em_export();
     foreach ($all_exportables as $other_table => $other_export) {
-      if ($export['api'] == $other_export['api'] and !$dump[$other_table]) {
+      if ($export['api'] == $other_export['api'] and !$reexport[$other_table]) {
         // Add in other exportables that uses the same API.  We just set it
         // to an empty array, as we add in existing exportables later.
         $reexport[$other_table] = array();
@@ -447,6 +421,9 @@ function em_dump() {
     $reexport[$table] = $module_exports;
   }
 
+  drush_print_r($reexport);
+  return;
+  
   em_write_exportables($module, $reexport);
 
   drush_op('em_revert_exportables', $revert);
