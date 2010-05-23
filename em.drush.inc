@@ -31,9 +31,6 @@ define('EM_STATUS_IN_DATABASE', 0x02);
 
 function em_drush_command() {
   $items['em-status'] = array(
-    // We're skipping the customary drush_ prefix, as it increases the chance
-    // of colliding with a hook.
-    'callback' => 'em_status',
     'description' => 'Show exportable status of current module, or all modules.',
     'options' => array(
       '-o' => 'Only show overridden.',
@@ -46,7 +43,6 @@ function em_drush_command() {
   );
 
   $items['em-revert'] = array(
-    'callback' => 'em_revert',
     'description' => 'Revert an exportable',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to revert, or \'all\' to revert all module defined exportables.'
@@ -57,7 +53,6 @@ function em_drush_command() {
   );
 
   $items['em-dump'] = array(
-    'callback' => 'em_dump',
     'description' => 'Dump an exportable to the current module',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to add.'
@@ -68,7 +63,6 @@ function em_drush_command() {
   );
 
   $items['em-remove'] = array(
-    'callback' => 'em_remove',
     'description' => 'Remove an exportable from the current module',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to remove.'
@@ -79,20 +73,17 @@ function em_drush_command() {
   );
 
   $items['em-update'] = array(
-    'callback' => 'em_update',
     'description' => 'Update module exportables from site',
   );
 
   $items['em-list'] = array(
-    'callback' => 'em_list',
     'description' => 'List site exportables',
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
 
   );
 
   $items['em-debug'] = array(
-    'callback' => 'em_debug',
-    'description' => 'List site exportables',
+    'description' => 'Debug...',
   );
 
   return $items;
@@ -218,7 +209,7 @@ function em_filter_exportables_api($apis, &$exportables) {
 }
 
 
-function em_debug($string) {
+function drush_em_debug($string) {
   $arguments = func_get_args();
   if (empty($arguments)) {
     return drush_set_error(dt('No exportables specified.'));
@@ -277,7 +268,7 @@ function em_export($table = NULL, $key = NULL) {
   return $export_types;
 }
 
-function em_status() {
+function drush_em_status() {
   $modules = array();
   if (drush_get_option('a', FALSE)) {
     $modules = module_list();
@@ -320,7 +311,7 @@ function em_status() {
   }
 }
 
-function em_revert() {
+function drush_em_revert() {
   if (!$module = em_get_module()) {
     return FALSE;
   }
@@ -390,7 +381,7 @@ function em_revert_exportables($exportables) {
   return $return;
 }
 
-function em_dump() {
+function drush_em_dump() {
   if (!$module = em_get_module()) {
     return FALSE;
   }
@@ -429,7 +420,7 @@ function em_dump() {
   drush_print('Done.');
 }
 
-function em_remove() {
+function drush_em_remove() {
   if (!$module = em_get_module()) {
     return FALSE;
   }
@@ -458,7 +449,7 @@ function em_remove() {
 
 }
 
-function em_update() {
+function drush_em_update() {
   if (!$module = em_get_module()) {
     return FALSE;
   }
@@ -595,7 +586,7 @@ function em_write($filename, $content) {
   drush_op('rename', $filename . '.new', $filename);
 }
 
-function em_list() {
+function drush_em_list() {
   // Find out what exportables that's available.
   foreach (array_keys(em_export()) as $table) {
     $site_exports = em_get_site_exportables($table);
