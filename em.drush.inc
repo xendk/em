@@ -487,12 +487,11 @@ function em_write_exportables($module, $exportables) {
     }
   }
 
-  // Write new files.
-  // Apparently drush thinks we're in the modules directory, while we're in
-  // fact in the site root. Odd.
+  // Write new files.  We change to the current dir of the invocation, to
+  // avoid odd behaviour in case of the same module being present at different
+  // paths.
   $old = getcwd();
  
-  // Maybe: $hook_file = drupal_get_path('module', $module) . '/' . $module . '.' . $export['api'] . '.inc';
   chdir(drush_cwd());
   // TODO: The api hook and the dependencies.
   foreach ($code as $api => $hook_code) {
@@ -573,7 +572,6 @@ function em_get_module_exports($module, $table) {
       $module_exports = $hook();
     }
   }
-  //chdir($old);
   return $module_exports;
 }
 
@@ -599,12 +597,7 @@ function em_get_site_exportables($table, $exportables = NULL) {
 
 function em_get_module($optional = FALSE) {
   // Find a module.
-  // Apparently drush thinks we're in the modules directory, while we're in
-  // fact in the site root. Odd.
-  $old = getcwd();
-  chdir(drush_cwd());
-  $modules = glob('*.module');
-  chdir($old);
+  $modules = glob(drush_cwd() . '/*.module');
   $candidates = array();
   foreach ($modules as $name) {
     $candidates[] = basename($name, '.module');
@@ -619,7 +612,7 @@ function em_get_module($optional = FALSE) {
 }
 
 /**
- * Export a field.
+ * Export an object.
  *
  * Stolen from views.
  */
