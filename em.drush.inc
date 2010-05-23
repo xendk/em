@@ -132,8 +132,50 @@ function em_tables() {
   return $tables;
 }
 
-function em_debug() {
-  drush_print_r(array_diff_assoc(em_export(), em_export_new()));
+/**
+ * Returns an array of the items in $haystack, that contains the $string as a
+ * substring, or a one element array, if the $string matches an item in
+ * $haystack exactly.
+ */
+function em_substring($string, $haystack) {
+  if ($haystack[$string]) {
+    return array($string);
+  }
+  $candidates = array();
+  foreach ($haystack as $hay) {
+    if (strpos($hay, $string) !== FALSE) {
+      $candidates[] = $hay;
+    }
+  }
+  return $candidates;
+}
+
+
+function em_debug($string) {
+  $arguments = func_get_args();
+  if (empty($arguments)) {
+    return drush_set_error(dt('No exportables specified.'));
+  }
+
+  foreach ($arguments as $arg) {
+    list($table_abbrev, $name) = explode(':', $arg, 2);
+    if (!$name) {
+      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
+    }
+    $table = em_table($table_abbrev, TRUE);
+    if ($table === FALSE) {
+      return drush_set_error(dt('Unknown type @type.', array('@type' => $table)));
+    }
+    if (is_array($table)) {
+      return drush_set_error(dt('Ambiguous export @abbrev. Possible exports: @exports',
+          array('@abbrev' => $table_abbrev, '@exports' => join(', ', $table))));
+    }
+    else {
+      $dump[$table][] = $name;
+    }
+  }
+
+  drush_print_r($dump);
   // drush_print_r(em_export());
 }
 
@@ -277,7 +319,6 @@ function em_revert_exportables($exportables) {
   return $return;
 }
 
-
 function em_dump() {
   if (!$module = em_get_module()) {
     return FALSE;
@@ -289,38 +330,53 @@ function em_dump() {
   }
 
   foreach ($arguments as $arg) {
-    list($table, $name) = explode(':', $arg, 2);
+    list($table_abbrev, $name) = explode(':', $arg, 2);
     if (!$name) {
       return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
-    } else {
-      $dump[$table][] = $name;
+    }
+    $candidates = em_substring($table_abbrev, array_keys(em_export()));
+    switch (sizeof($candidates)) {
+      case 0:
+        return drush_set_error(dt('Unknown type @type.', array('@type' => $table_abbrev)));
+        break;
+      case 1:
+        $dump[$candidates[0]][] = $name;
+        break;
+      default:
+        return drush_set_error(dt('Ambiguous export @abbrev. Possible exports: @exports',
+            array('@abbrev' => $table_abbrev, '@exports' => join(', ', $candidates))));
     }
   }
 
   $reexport = array();
   foreach ($dump as $table => $entries) {
-    if ($export = em_export($table)) {
-      $site_exportables = em_get_site_exportables($table, array_flip($entries));
-      foreach ($entries as $entry) {
-        if (!$site_exportables[$entry]) {
+    $export = em_export($table);
+    $site_exportables = em_get_site_exportables($table);
+    foreach ($entries as $entry) {
+      $candidates = em_substring($entry, array_keys($site_exportables));
+      switch (sizeof($candidates)) {
+        case 0:
           return drush_set_error(dt("Unknown @type '@entry'.",
-                                    array('@type' => $table, '@entry' => $entry)));
-        } else {
+              array('@type' => $table, '@entry' => $entry)));
+          break;
+        case 1:
+          $entry = $candidates[0];
           $reexport[$table][$entry] = $entry;
-        }
+          break;
+        default:
+          return drush_set_error(dt('Ambiguous @type @abbrev. Candidates: @candidates',
+              array('@type' => $table, '@abbrev' => $entry, '@candidates' => join(', ', $candidates))));
       }
-      // Take API into account. hook_default_page_manager_handlers and
-      // hook_default_page_manager_pages uses the same file.
-      $all_exportables = em_export();
-      foreach ($all_exportables as $other_table => $other_export) {
-        if ($export['api'] == $other_export['api'] and !$dump[$other_table]) {
-          // Add in other exportables that uses the same API.  We just set it
-          // to an empty array, as we add in existing exportables later.
-          $reexport[$other_table] = array();
-        }
+    }
+    // Take API into account. hook_default_page_manager_handlers and
+    // hook_default_page_manager_pages uses the same file.
+    $all_exportables = em_export();
+    foreach ($all_exportables as $other_table => $other_export) {
+      if ($export['api'] == $other_export['api'] and !$dump[$other_table]) {
+        // Add in other exportables that uses the same API.  We just set it
+        // to an empty array, as we add in existing exportables later.
+        $reexport[$other_table] = array();
       }
-    } else {
-      return drush_set_error(dt('Unknown type @type.', array('@type' => $table)));
     }
   }
 
@@ -360,7 +416,6 @@ function em_remove() {
       $remove[$table][$name] = $name;
     }
   }
-
 
   // Get overridden module exports.
   // TODO: don't bother rewriting files, if we're not messing with it.
@@ -513,7 +568,6 @@ function em_write_exportables($module, $exportables) {
   return TRUE;
 }
 
-
 function em_write($filename, $content) {
   // Still write the new file.
   file_put_contents($filename . '.new', $content);
@@ -521,9 +575,6 @@ function em_write($filename, $content) {
   drush_op('rename', $filename . '.new', $filename);
 }
 
-/**
- * TODO: Refactor.
- */
 function em_list() {
   // Find out what exportables that's available.
   foreach (array_keys(em_export()) as $table) {
