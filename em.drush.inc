@@ -139,8 +139,6 @@ function em_debug() {
 
 /**
  * Return information about known exportable types.
- *
- * @todo is $table and/or $key really useful?
  */
 function em_export($table = NULL, $key = NULL) {
   static $export_types = NULL;
@@ -169,15 +167,17 @@ function em_export($table = NULL, $key = NULL) {
   return $export_types;
 }
 
-
 function em_status() {
   $modules = array();
-  if ($module = em_get_module()) {
+  if (drush_get_option('a', FALSE)) {
+    $modules = module_list();
+  }
+  elseif ($module = em_get_module()) {
     $modules[] = $module;
   }
 
-  if (empty($modules) or drush_get_option('a', FALSE)) {
-    $modules = module_list();
+  if (empty($modules)) {
+    return FALSE;
   }
 
   // Now, find out what exportables that's available.
