@@ -212,6 +212,25 @@ function em_filter_exportables($patterns, &$exportables, &$matched) {
   return $matched_exports;
 }
 
+function em_exportables_apis($exportables) {
+  $apis = array();
+  foreach ($exportables as $table => $dummy) {
+    $apis[] = em_export($table, 'api');
+  }
+  return $apis;
+}
+
+function em_filter_exportables_api($apis, &$exportables) {
+  $removed = array();
+  foreach ($exportables as $table => $dummy) {
+    if (in_array(em_export($table, 'api'), $apis)) {
+      $removed[$table] = $exportables[$table];
+      unset($exportables[$table]);
+    }
+  }
+  return $removed;
+}
+
 
 function em_debug($string) {
   $arguments = func_get_args();
@@ -443,31 +462,15 @@ function em_remove() {
     return drush_set_error(dt('No exportables specified.'));
   }
 
-  foreach ($arguments as $arg) {
-    list($table, $name) = explode(':', $arg, 2);
-    if (!$name) {
-      return drush_set_error(dt('Malformed export @name.', array('@name' => $arg)));
-    } else {
-      $remove[$table][$name] = $name;
-    }
-  }
-
-  // Get overridden module exports.
-  // TODO: don't bother rewriting files, if we're not messing with it.
+  // Get module exports.
   $module_exports = em_get_module_exports_all($module);
-  foreach ($module_exports as $table => $exports) {
-    $site_exports = em_get_site_exportables($table, $exports);
-    foreach ($site_exports as $name => $object) {
-      if ($remove[$table][$name]) {
-        unset($module_exports[$table][$name]);
-      }
-      else {
-        // Don't bother rewriting files, if we're not messing with it.
-        unset($module_exports[$table]);
-      }
-    }
-  }
 
+  $exports = em_export();
+  $removed = em_filter_exportables($arguments, $module_exports, $dummy);
+
+  // Filter down to exports sharing api with the removed.
+  $new_module_exports = em_filter_exportables_api(em_exportables_apis($removed), $module_exports);
+ 
   // Write files.
   em_write_exportables($module, $module_exports);
 
