@@ -34,21 +34,24 @@ function em_export_strongarm($variable, $indent = '') {
 
 function em_strongarm_status($export) {
   // Due to the nature of strongarm, exports are never overridden.
+  // TODO: But really, they are, in some sense. Look into this.
   return EM_STATUS_IN_CODE;
 }
 
 function em_strongarm_delete($export) {
   // As strongarm can't be overridden, reverting is a noop.
+  // TODO: variable_del is how to revert.
   return;
 }
 
 /**
- * Returns an empty listing of all variables.
- *
- * Really it should return a list of all existing variables, but we don't want
- * a full variable listing in em-list, and the other em functions doesn't care.
- * This might change.
+ * Returns a listing of all variables.
  */
 function em_strongarm_list() {
-  return array();
+  $result = array();
+  $res = db_query("SELECT name FROM {variable}");
+  while ($row = db_fetch_object($res)) {
+    $result[$row->name] = TRUE;
+  }
+  return $result;
 }
