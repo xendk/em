@@ -192,9 +192,7 @@ function em_status() {
         // Now load the same objects from the site.
         $site_exports = em_get_site_exportables($table, $module_exports);
         foreach ($site_exports as $name => $export) {
-          $func = em_export($table, 'status callback');
-          $overridden = $func($export) & EM_STATUS_IN_DATABASE;
-          if ($overridden or !$quick) {
+          if (em_is_in_database($table, $export) or !$quick) {
             $output[$table] .= "  " . $name . ': ' .
               ($overridden ? 'Overridden' : 'Normal') .
               "\n";
@@ -232,9 +230,8 @@ function em_revert() {
   foreach ($exports as $table => $export) {
     $module_exports = em_get_module_exports($module, $table);
     $site_exports = em_get_site_exportables($table, $module_exports);
-    $func = $export['status callback'];
     foreach ($site_exports as $name => $object) {
-      if ($func($object) & EM_STATUS_IN_DATABASE) {
+      if (em_is_in_database($table, $object)) {
         $resetables[$table][$name] = $object;
       }
     }
@@ -402,8 +399,7 @@ function em_update() {
     $api_mapping[$api][] = $table;
     if ($site_exports) {
       foreach ($site_exports as $name => $object) {
-        $func = em_export($table, 'status callback');
-        if ($func($object) & EM_STATUS_IN_DATABASE) {
+        if (em_is_in_database($table, $object)) {
           // Replace module by sites.
           $apis_changed[$api] = TRUE;
           $module_exports[$table][$name] = $object;
@@ -534,8 +530,8 @@ function em_list() {
   foreach (array_keys(em_export()) as $table) {
     $site_exports = em_get_site_exportables($table);
     foreach ($site_exports as $name => $export) {
-      $func = em_export($table, 'status callback');
-      if ($func($export) == EM_STATUS_IN_DATABASE) {
+      // Only exportables that's only in database.
+      if (em_is_overridden($table, $export) == EM_STATUS_IN_DATABASE) {
         $output[$table] .= "  " . $table . ':'. $name . "\n";
       }
     }
@@ -657,4 +653,28 @@ function em_var_export($var, $prefix = '', $init = TRUE) {
   }
 
   return $output;
+}
+
+function em_is_overridden($table, $object) {
+  $func = em_export($table, 'status callback');
+  if (function_exists($func)) {
+    return $func($object);
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Returns whether an export is defined in the site database.
+ */
+function em_is_in_database($table, $object) {
+  return em_is_overridden($table, $object) & EM_STATUS_IN_DATABASE;
+}
+
+/**
+ * Returns whether an export is defined in the site code.
+ */
+function em_is_in_code($table, $object) {
+  return em_is_overridden($table, $object) & EM_STATUS_IN_CODE;
 }
