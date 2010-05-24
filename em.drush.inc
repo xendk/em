@@ -43,7 +43,7 @@ function em_drush_command() {
   );
 
   $items['em-revert'] = array(
-    'description' => 'Revert an exportable',
+    'description' => 'Revert an exportable.',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to revert, or \'all\' to revert all module defined exportables.'
     ),
@@ -53,7 +53,7 @@ function em_drush_command() {
   );
 
   $items['em-dump'] = array(
-    'description' => 'Dump an exportable to the current module',
+    'description' => 'Dump an exportable to the current module.',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to add.'
     ),
@@ -63,7 +63,7 @@ function em_drush_command() {
   );
 
   $items['em-remove'] = array(
-    'description' => 'Remove an exportable from the current module',
+    'description' => 'Remove an exportable from the current module.',
     'arguments' => array(
       'exportables' => 'Space delimited list of exportables to remove.'
     ),
@@ -73,13 +73,18 @@ function em_drush_command() {
   );
 
   $items['em-update'] = array(
-    'description' => 'Update module exportables from site',
+    'description' => 'Update module exportables from site.',
   );
 
   $items['em-list'] = array(
-    'description' => 'List site exportables',
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
+    'description' => 'List site exportables.',
+  );
 
+  $items['em-diff'] = array(
+    'description' => 'Show differences between code and database.',
+    'options' => array(
+      '-t' => 'Terse mode. Only show differing lines.',
+    ),
   );
 
   $items['em-debug'] = array(
@@ -94,18 +99,20 @@ function em_drush_command() {
  */
 function em_drush_help($section) {
   switch ($section) {
-    case 'drush:em status':
+    case 'drush:em-status':
       return dt('Lists all exportables defined by the current module, and whether they are overridden or not.');
-    case 'drush:em revert':
+    case 'drush:em-revert':
       return dt('Reverts the given exportables to their code defined state.');
-    case 'drush:em dump':
+    case 'drush:em-dump':
       return dt('Dump an exportable to the current module. You might need to add a function like hook_ctools_api to your module file.');
-    case 'drush:em remove':
+    case 'drush:em-remove':
       return dt('Remove an exportable from the current module.');
-    case 'drush:em update':
+    case 'drush:em-update':
       return dt('Updates all overridden exportables defined by the current module with the settings from the site, and reverts them afterwards.');
-    case 'drush:em list':
-      return dt('Lists all site exportables that is not defined in code (overridden or not).');
+    case 'drush:em-list':
+      return dt('Lists all site exportables that is not defined in code.');
+    case 'drush:em-diff':
+      return dt('Show differences between site and code for overridden exportables.');
   }
 }
 
@@ -309,6 +316,51 @@ function drush_em_status() {
       drush_print($listing);
     }
   }
+}
+
+function drush_em_diff() {
+  if ($module = em_get_module()) {
+    $modules[] = $module;
+  } else {
+    return FALSE;
+  }
+
+  $diff_opts = '';
+  if (drush_get_option('t', FALSE)) {
+    $diff_opts .= '--suppress-common-lines';
+  }
+  
+  $export_schemas = em_export();
+  foreach ($modules as $module) {
+    $output = array();
+    foreach ($export_schemas as $table => $export) {
+      $site_exports = array();
+      $module_exports = em_get_module_exports($module, $table);
+      if (sizeof($module_exports)) {
+        // Now load the same objects from the site.
+        $site_exports = em_get_site_exportables($table, $module_exports);
+        foreach ($site_exports as $name => $export) {
+          if (em_is_in_database($table, $export)) {
+            drush_print($table . ' ' . $name . ':');
+            drush_print(em_diff(em_var_export($module_exports[$name]), em_var_export($export), $diff_opts));
+            drush_print();
+          }
+        }
+      }
+    }
+  }
+}
+
+function em_diff($a, $b, $diff_opts) {
+  // drush_save_data_to_temp_file() can't handle 2 concurrent files, so we do
+  // it this way.
+  $a_file = drush_tempnam('em-a');
+  file_put_contents($a_file, $a);
+  $b_file = drush_tempnam('em-b');
+  file_put_contents($b_file, $b);
+  //drush_print_r(array($a_file, $b_file));
+  //drush_print(file_exists($a_file) ? 'yes' : 'no');
+  return shell_exec("/usr/bin/diff -y $diff_opts $a_file $b_file");
 }
 
 function drush_em_revert() {
@@ -676,7 +728,7 @@ function em_get_module($optional = FALSE) {
 /**
  * Export an object.
  *
- * Stolen from views.
+ * Stolen from views/CTools.
  */
 function em_var_export($var, $prefix = '', $init = TRUE) {
   if (is_array($var)) {
@@ -690,6 +742,13 @@ function em_var_export($var, $prefix = '', $init = TRUE) {
       }
       $output .= ')';
     }
+  }
+  else if (is_object($var) && get_class($var) === 'stdClass') {
+    // var_export() will export stdClass objects using an undefined
+    // magic method __set_state() leaving the export broken. This
+    // workaround avoids this by casting the object as an array for
+    // export and casting it back to an object when evaluated.
+    $output .= '(object) ' . ctools_var_export((array) $var);
   }
   else if (is_bool($var)) {
     $output = $var ? 'TRUE' : 'FALSE';

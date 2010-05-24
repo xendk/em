@@ -64,14 +64,14 @@ function field_gatekeeper_em_exportables() {
 function em_fg_get_all_gatekeeper() {
   module_load_include('inc', 'content', '/includes/content.crud');
   $fields = array();
+  // Module defined.
+  $gw_fields = field_gatekeeper_get_field_gatekeeper();
+  foreach ($gw_fields as $field) {
+    $fields[$field['field_name']] = field_gatekeeper_base_clean($field);
+  }
   // Load fields in DB from CCK.
   $all_fields = content_field_instance_read(NULL, TRUE);
   foreach ($all_fields as $field) {
-    $fields[$field['field_name']] = field_gatekeeper_base_clean($field);
-  }
-  // Overlay module defined.
-  $gw_fields = field_gatekeeper_get_field_gatekeeper();
-  foreach ($gw_fields as $field) {
     $fields[$field['field_name']] = field_gatekeeper_base_clean($field);
   }
   return $fields;
@@ -80,23 +80,24 @@ function em_fg_get_all_gatekeeper() {
 function em_fg_get_all_instances() {
   module_load_include('inc', 'content', '/includes/content.crud');
   $fields = array();
-  // Load fields in DB from CCK.
+  // Module defined.
+  $gw_fields = field_gatekeeper_get_field_instances();
+  foreach ($gw_fields as $field) {
+    $fields[$field['name']] = field_gatekeeper_instance_clean($field);
+  }
+  // Overlay fields in DB from CCK.
   $all_fields = content_field_instance_read(NULL, TRUE);
   foreach ($all_fields as $field) {
     $field = field_gatekeeper_instance_clean($field);
     $field['name'] = $field['type_name'] . '-' . $field['field_name'];
     $fields[$field['name']] = $field;
   }
-  // Overlay module defined.
-  $gw_fields = field_gatekeeper_get_field_instances();
-  foreach ($gw_fields as $field) {
-    $fields[$field['name']] = field_gatekeeper_instance_clean($field);
-  }
   return $fields;
 }
 
 function em_fg_get_all_groups() {
   $groups = array();
+  // TODO: Load from module?
   $all_groups = fieldgroup_groups();
   foreach ($all_groups as $type => $type_groups) {
     foreach ($type_groups as $group_name => $group) {
@@ -154,8 +155,7 @@ function em_fg_gatekeeper_status($field) {
   $instances = content_field_instance_read($options);
 
   foreach ($instances as $instance) {
-    $instance['locked'] = '1';
-    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_base_clean($instance));
+    $diffs = _field_gatekeeper_array_rdiff($field, $code_defined[$field['field_name']]);
     if ($diffs) {
       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
@@ -179,8 +179,7 @@ function em_fg_instance_status($field) {
   }
 
   foreach ($instances as $instance) {
-    $instance['locked'] = '1';
-    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_instance_clean($instance));
+    $diffs = _field_gatekeeper_array_rdiff($field, $code_defined[$field['name']]);
     if ($diffs) {
        return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
