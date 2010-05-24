@@ -30,8 +30,13 @@ define('EM_STATUS_IN_CODE', 0x01);
 define('EM_STATUS_IN_DATABASE', 0x02);
 
 function em_drush_command() {
+  // Some things depend on drush version.
+  $drush_three_plus = defined('DRUSH_VERSION');
+  
   $items['em-status'] = array(
     'description' => 'Show exportable status of current module, or all modules.',
+    // Work around drush 2 thinking that drush_em_status is a hook on the status command.
+    'callback' => 'drush_em_em_status',
     'options' => array(
       '-o' => 'Only show overridden.',
       '-a' => 'Show all modules',
@@ -80,17 +85,28 @@ function em_drush_command() {
     'description' => 'List site exportables.',
   );
 
-  $items['em-diff'] = array(
-    'description' => 'Show differences between code and database.',
-    'options' => array(
-      '-t' => 'Terse mode. Only show differing lines.',
-    ),
-  );
-
+  if ($drush_three_plus) {
+    $items['em-diff'] = array(
+      'description' => 'Show differences between code and database.',
+      'options' => array(
+        '-t' => 'Terse mode. Only show differing lines.',
+      ),
+    );
+  }
+  
   $items['em-debug'] = array(
     'description' => 'Debug...',
   );
 
+  if (!$drush_three_plus) {
+    // Define the callbacks for drush 2.
+    foreach ($items as $name => &$item) {
+      if (!$item['callback']) {
+        $item['callback'] = 'drush_' .  str_replace("-", "_", $name);
+      }
+    }
+  }
+  
   return $items;
 }
 
@@ -275,7 +291,7 @@ function em_export($table = NULL, $key = NULL) {
   return $export_types;
 }
 
-function drush_em_status() {
+function drush_em_em_status() {
   $modules = array();
   if (drush_get_option('a', FALSE)) {
     $modules = module_list();
