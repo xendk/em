@@ -133,7 +133,7 @@ function em_drush_help($section) {
 }
 
 function em_match($string, $haystack, $type) {
-  if ($haystack[$string]) {
+  if (in_string($sting, $haystack)) {
     return array($string);
   }
   $candidates = array();
@@ -230,7 +230,6 @@ function em_filter_exportables_api($apis, &$exportables) {
   }
   return $removed;
 }
-
 
 function drush_em_debug($string) {
   $arguments = func_get_args();
