@@ -51,7 +51,7 @@ function em_export_view($view, $indent) {
 function em_view_status($export) {
   if ($export->type == t('Overridden')) {
     return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
-  } elseif ($export->type == t('Standard')) {
+  } elseif ($export->type == t('Standard') or $export->type == t('Default')) {
     return EM_STATUS_IN_CODE;
   }
   // t('Normal')
