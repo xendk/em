@@ -355,10 +355,12 @@ function drush_em_diff() {
       if (sizeof($module_exports)) {
         // Now load the same objects from the site.
         $site_exports = em_get_site_exportables($table, $module_exports);
-        foreach ($site_exports as $name => $export) {
-          if (em_is_in_database($table, $export)) {
+        foreach ($site_exports as $name => $database_export) {
+          if (em_is_in_database($table, $database_export)) {
             drush_print($table . ' ' . $name . ':');
-            drush_print(em_diff(em_var_export($module_exports[$name]), em_var_export($export), $diff_opts));
+            $code = $export['export callback']($module_exports[$name], '');
+            $database = $export['export callback']($database_export, '');
+            drush_print(em_diff($code, $database, $diff_opts));
             drush_print();
           }
         }
