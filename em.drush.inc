@@ -101,7 +101,7 @@ function em_drush_command() {
   if (!$drush_three_plus) {
     // Define the callbacks for drush 2.
     foreach ($items as $name => &$item) {
-      if (!$item['callback']) {
+      if (!isset($item['callback'])) {
         $item['callback'] = 'drush_' .  str_replace("-", "_", $name);
       }
     }
