@@ -133,7 +133,7 @@ function em_drush_help($section) {
 }
 
 function em_match($string, $haystack, $type) {
-  if (in_string($sting, $haystack)) {
+  if (in_array($sting, $haystack)) {
     return array($string);
   }
   $candidates = array();
