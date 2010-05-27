@@ -657,6 +657,7 @@ function em_write($filename, $content) {
 
 function drush_em_list() {
   // Find out what exportables that's available.
+  $output = array();
   foreach (array_keys(em_export()) as $table) {
     $site_exports = em_get_site_exportables($table);
     foreach ($site_exports as $name => $export) {
