@@ -641,7 +641,9 @@ function em_write_exportables($module, $exportables) {
       em_write($module . '.' . $api . '.inc', $file_code);
     }
     else {
-      drush_op('unlink', $module . '.' . $api . '.inc');
+      if (file_exists($module . '.' . $api . '.inc')) {
+        drush_op('unlink', $module . '.' . $api . '.inc');
+      }
     }
   }
   chdir($old);
