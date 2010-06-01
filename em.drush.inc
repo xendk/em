@@ -496,7 +496,7 @@ function drush_em_dump() {
   // Take API into account. hook_default_page_manager_handlers and
   // hook_default_page_manager_pages uses the same file.
   $all_module_exports = em_get_module_exports_all($module);
-  $shared_apis = em_filter_exportables_api(em_exportables_apis($reexport), $all_module_exports)
+  $shared_apis = em_filter_exportables_api(em_exportables_apis($reexport), $all_module_exports);
   foreach ($shared_apis as $table => $entries) {
     $reexport[$table] = array_merge($shared_apis[$table], $reexport[$table]);
   }
