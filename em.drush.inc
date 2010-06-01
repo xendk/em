@@ -55,15 +55,21 @@ function em_drush_command() {
     'examples' => array(
       'em revert views:frontpage' => 'Revert the view "frontpage".',
     ),
+    'options' => array(
+      '-e' => "Don't revert, just show what would have been done.",
+    ),
   );
 
   $items['em-dump'] = array(
-    'description' => 'Dump an exportable to the current module.',
+    'description' => 'Dump or update exportables to the current module.',
     'arguments' => array(
-      'exportables' => 'Space delimited list of exportables to add.'
+      'exportables' => 'Space delimited list of exportables to add/update.'
     ),
     'examples' => array(
       'em dump views:frontpage' => 'Dump the view "frontpage" to the relevant file.',
+    ),
+    'options' => array(
+      '-e' => "Don't revert exportables.",
     ),
   );
 
@@ -79,6 +85,9 @@ function em_drush_command() {
 
   $items['em-update'] = array(
     'description' => 'Update module exportables from site.',
+    'options' => array(
+      '-e' => "Don't revert exportables.",
+    ),
   );
 
   $items['em-list'] = array(
@@ -120,7 +129,7 @@ function em_drush_help($section) {
     case 'drush:em-revert':
       return dt('Reverts the given exportables to their code defined state.');
     case 'drush:em-dump':
-      return dt('Dump an exportable to the current module. You might need to add a function like hook_ctools_api to your module file.');
+      return dt('Dump exportables to the current module. You might need to add a function like hook_ctools_api to your module file.');
     case 'drush:em-remove':
       return dt('Remove an exportable from the current module.');
     case 'drush:em-update':
@@ -435,12 +444,18 @@ function drush_em_revert() {
 function em_revert_exportables($exportables) {
   $return = TRUE;
   $exports = em_export();
+  $dry = drush_get_option('e', FALSE);
+
   foreach ($exportables as $table => $objects) {
     foreach ($objects as $name => $object) {
       if ($exports[$table]['delete callback']) {
-        drush_print(dt('Trying to revert @name.', array('@name' => $name)));
-        drush_op($exports[$table]['delete callback'], $object);
-        // $exports[$table]['delete callback']($object);
+        if ($dry) {
+          drush_print(dt('Would try to revert @name.', array('@name' => $name)));
+        }
+        else {
+          drush_print(dt('Trying to revert @name.', array('@name' => $name)));
+          drush_op($exports[$table]['delete callback'], $object);
+        }
       } else {
         drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
         $return = FALSE;
