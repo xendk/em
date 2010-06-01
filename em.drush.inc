@@ -483,18 +483,22 @@ function drush_em_dump() {
   if ($reexport === FALSE) {
     return;
   }
-
-  // Take API into account. hook_default_page_manager_handlers and
-  // hook_default_page_manager_pages uses the same file.
-  $reexport += em_filter_exportables_api(em_exportables_apis($reexport), $site_exportables);
   
   // Now, add in the existing ones.
   foreach ($reexport as $table => $entries) {
     $module_exports = em_get_module_exports($module, $table);
     // Override or add.
     $revert[$table] = em_get_site_exportables($table, $entries);
-    $module_exports = array_merge($module_exports, $revert[$table]);
-    $reexport[$table] = $module_exports;
+    $new_module_exports = array_merge($module_exports, $revert[$table]);
+    $reexport[$table] = $new_module_exports;
+  }
+
+  // Take API into account. hook_default_page_manager_handlers and
+  // hook_default_page_manager_pages uses the same file.
+  $all_module_exports = em_get_module_exports_all($module);
+  $shared_apis = em_filter_exportables_api(em_exportables_apis($reexport), $all_module_exports)
+  foreach ($shared_apis as $table => $entries) {
+    $reexport[$table] = array_merge($shared_apis[$table], $reexport[$table]);
   }
 
   em_write_exportables($module, $reexport);
