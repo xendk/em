@@ -529,11 +529,12 @@ function drush_em_remove() {
     return;
   }
 
-  // Filter down to exports sharing api with the removed.
+  // Filter down to exports sharing api with the removed. The removed
+  // has been removed from $module_exports.
   $new_module_exports = em_filter_exportables_api(em_exportables_apis($removed), $module_exports);
- 
+
   // Write files.
-  em_write_exportables($module, $module_exports);
+  em_write_exportables($module, $new_module_exports);
 
 }
 
