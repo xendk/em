@@ -198,7 +198,9 @@ function em_filter_exportables($patterns, &$exportables, &$matched) {
             return;
           }
           elseif ($export_candidates) {
-            $matched_exports[$table_candidate] = array();
+            if (!$matched_exports[$table_candidate]) {
+              $matched_exports[$table_candidate] = array();
+            }
             if (sizeof($export_candidates) > 1) {
               $matched = TRUE;
             }
@@ -218,6 +220,7 @@ function em_filter_exportables($patterns, &$exportables, &$matched) {
       }
     }
   }
+
   return $matched_exports;
 }
 
