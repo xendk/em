@@ -142,7 +142,7 @@ function em_drush_help($section) {
 }
 
 function em_match($string, $haystack, $type) {
-  if (in_array($sting, $haystack)) {
+  if (in_array($string, $haystack)) {
     return array($string);
   }
   $candidates = array();
@@ -185,7 +185,7 @@ function em_filter_exportables($patterns, &$exportables, &$matched) {
     } else {
       $table_candidates = em_match($table_pattern, array_keys($exportables), 'export');
       if ($table_candidates === FALSE) {
-        return;
+        return FALSE;
       }
       if ($table_candidates) {
         if (sizeof($table_candidates) > 1) {
@@ -195,7 +195,7 @@ function em_filter_exportables($patterns, &$exportables, &$matched) {
           $export_candidates = em_match($name_pattern, array_keys($exportables[$table_candidate]), $table_candidate);
           // Only error out if the table wasn't matched by pattern.
           if ($export_candidates === FALSE and sizeof($table_candidates) == 1) {
-            return;
+            return FALSE;
           }
           elseif ($export_candidates) {
             if (!$matched_exports[$table_candidate]) {
@@ -486,7 +486,7 @@ function drush_em_dump() {
   if ($reexport === FALSE) {
     return;
   }
-  
+
   // Now, add in the existing ones.
   foreach ($reexport as $table => $entries) {
     $module_exports = em_get_module_exports($module, $table);
@@ -676,7 +676,9 @@ function em_write_exportables($module, $exportables) {
 function em_write($filename, $content) {
   // Still write the new file.
   file_put_contents($filename . '.new', $content);
-  drush_op('rename', $filename, $filename . '.em~');
+  if (file_exists($filename)) {
+    drush_op('rename', $filename, $filename . '.em~');
+  }
   drush_op('rename', $filename . '.new', $filename);
 }
 
