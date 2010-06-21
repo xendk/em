@@ -150,7 +150,7 @@ function em_match($string, $haystack, $type) {
     // Pattern matching.
     $string = strtr($string, array('*' => '.*'));
     foreach ($haystack as $hay) {
-      if (preg_match('{' . $string . '}', $hay)) {
+      if (preg_match('{^' . $string . '$}', $hay)) {
         $candidates[] = $hay;
       }
     }
