@@ -368,11 +368,16 @@ function drush_em_diff() {
         $site_exports = em_get_site_exportables($table, $module_exports);
         foreach ($site_exports as $name => $database_export) {
           if (em_is_in_database($table, $database_export)) {
-            drush_print($table . ' ' . $name . ':');
-            $code = $export['export callback']($module_exports[$name], '');
-            $database = $export['export callback']($database_export, '');
-            drush_print(em_diff($code, $database, $diff_opts));
-            drush_print();
+            if (function_exists($export['export callback'])) {
+              drush_print($table . ' ' . $name . ':');
+              $code = $export['export callback']($module_exports[$name], '');
+              $database = $export['export callback']($database_export, '');
+              drush_print(em_diff($code, $database, $diff_opts));
+              drush_print();
+            }
+            else {
+              drush_print(dt("Cannot diff @table, no export hook.", array('@table' => $table)));
+            }
           }
         }
       }
