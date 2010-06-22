@@ -210,11 +210,21 @@ function em_fg_group_status($group) {
 }
 
 function em_fg_gatekeeper_delete($field) {
-  drush_print(dt('Reverting !field_name will also revert all instances of the field.', array('!field_name' => $field['field_name'])));
+  $all_fields = field_gatekeeper_get_field_instances();
+  $instances = array();
+  foreach ($all_fields as $field) {
+    if ($field['field_name'] == $field['field_name']) {
+      $content_types[] = $field['type_name'];
+      $instances[] = $field;
+    }
+  }
+  drush_print(dt('Reverting !field_name will also revert all instances of the field in the content types: @types.', array('!field_name' => $field['field_name'], '@types' => implode(', ', $content_types))));
   if(!drush_confirm(dt('Do you want to do this?'))) {
     return;
   }
-  field_gatekeeper($field);
+  foreach ($instances as $instance) {
+    field_gatekeeper($instance);
+  }
 }
 
 
