@@ -1,6 +1,6 @@
 <?php
 
-// $Id$
+// $Id: views.inc,v 1.1 2010/06/21 20:41:02 xen Exp $
 
 /**
  * @file
