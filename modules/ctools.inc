@@ -18,7 +18,7 @@ function ctools_em_exportables() {
   $schemas = ctools_export_get_schemas(TRUE);
 
   foreach ($schemas as $etable => $schema) {
-    if ($schema['export']['api']) {
+    if (isset($schema['export']['api'])) {
       $export_types[$etable] = array(
         'api' => $schema['export']['api']['api'],
         'identifier' => $schema['export']['identifier'],
@@ -53,7 +53,7 @@ function ctools_em_exportables_alter($export_types) {
     ),
   );
   foreach ($overrides as $name => $override) {
-    if ($export_types[$name]) {
+    if (isset($export_types[$name])) {
       $export_types[$name] = $override + $export_types[$name];
     }
   }

@@ -32,7 +32,7 @@ define('EM_STATUS_IN_DATABASE', 0x02);
 function em_drush_command() {
   // Some things depend on drush version.
   $drush_three_plus = defined('DRUSH_VERSION');
-  
+
   $items['em-status'] = array(
     'description' => 'Show exportable status of current module, or all modules.',
     // Work around drush 2 thinking that drush_em_status is a hook on the status command.
@@ -102,7 +102,7 @@ function em_drush_command() {
       ),
     );
   }
-  
+
   $items['em-debug'] = array(
     'description' => 'Debug...',
   );
@@ -115,7 +115,7 @@ function em_drush_command() {
       }
     }
   }
-  
+
   return $items;
 }
 
@@ -293,7 +293,7 @@ function em_export($table = NULL, $key = NULL) {
     $export_types = module_invoke_all('em_exportables');
     drupal_alter('em_exportables', $export_types);
   }
-  
+
   if ($key) {
     return $export_types[$table][$key];
   } elseif ($table) {
@@ -356,7 +356,7 @@ function drush_em_diff() {
   if (drush_get_option('t', FALSE)) {
     $diff_opts .= '--suppress-common-lines';
   }
-  
+
   $export_schemas = em_export();
   foreach ($modules as $module) {
     $output = array();
@@ -628,7 +628,7 @@ function em_write_exportables($module, $exportables) {
               return drush_set_error('Aborting.');
             }
           }
-        
+
           $output = $export['to hook code callback'](array_keys($objects), $module);
           $code[$api] .= $output;
         }
@@ -654,7 +654,7 @@ function em_write_exportables($module, $exportables) {
   // avoid odd behaviour in case of the same module being present at different
   // paths.
   $old = getcwd();
- 
+
   chdir(drush_cwd());
   // TODO: The api hook and the dependencies.
   foreach ($code as $api => $hook_code) {
@@ -747,7 +747,7 @@ function em_get_site_exportables($table, $exportables = NULL) {
   if (is_null($exportables) and function_exists($export['list callback'])) {
     $exportables = $export['list callback']();
   }
-  $args = $export['load arguments'];
+  $args = isset($export['load arguments']) ? $export['load arguments'] : array();
   if (sizeof($exportables)) {
     $args[] = array_keys($exportables);
     $site_exports = call_user_func_array($export['load callback'], $args);
