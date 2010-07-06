@@ -1,6 +1,6 @@
 <?php
 
-// $Id: field_gatekeeper.inc,v 1.1 2010/06/21 20:41:02 xen Exp $
+// $Id: field_gatekeeper.inc,v 1.2 2010/06/23 20:20:19 xen Exp $
 
 /**
  * @file
@@ -302,11 +302,6 @@ function em_fg_groups_to_hook_code($objects, $module) {
     }
 
     $type_groups = fieldgroup_groups($type);
-
-    foreach ($all_groups as $type => $type_groups) {
-    foreach ($type_groups as $group_name => $group) {
-    }
-  }
     
     if (!$type_groups[$group_name]) {
       continue;
