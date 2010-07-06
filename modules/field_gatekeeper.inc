@@ -215,7 +215,7 @@ function em_fg_gatekeeper_delete($field) {
   foreach ($all_fields as $field_instance) {
     if ($field['field_name'] == $field_instance['field_name']) {
       $content_types[] = $field_instance['type_name'];
-      $instances[] = $field;
+      $instances[] = $field_instance;
     }
   }
   drush_print(dt('Reverting !field_name will also revert all instances of the field in the content types: @types.', array('!field_name' => $field['field_name'], '@types' => implode(', ', $content_types))));
@@ -223,7 +223,9 @@ function em_fg_gatekeeper_delete($field) {
     return;
   }
   foreach ($instances as $instance) {
-    field_gatekeeper($instance);
+    if (!field_gatekeeper($instance)) {
+      drush_print(dt('Error reverting @instance', array('@instance' => $instance['field_name'])));
+    }
   }
 }
 
