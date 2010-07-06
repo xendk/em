@@ -212,9 +212,9 @@ function em_fg_group_status($group) {
 function em_fg_gatekeeper_delete($field) {
   $all_fields = field_gatekeeper_get_field_instances();
   $instances = array();
-  foreach ($all_fields as $field) {
-    if ($field['field_name'] == $field['field_name']) {
-      $content_types[] = $field['type_name'];
+  foreach ($all_fields as $field_instance) {
+    if ($field['field_name'] == $field_instance['field_name']) {
+      $content_types[] = $field_instance['type_name'];
       $instances[] = $field;
     }
   }
