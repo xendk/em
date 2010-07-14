@@ -506,7 +506,10 @@ function drush_em_dump() {
   $all_module_exports = em_get_module_exports_all($module);
   $shared_apis = em_filter_exportables_api(em_exportables_apis($reexport), $all_module_exports);
   foreach ($shared_apis as $table => $entries) {
-    $reexport[$table] = array_merge($shared_apis[$table], $reexport[$table]);
+    if (!isset($reexport[$table])) {
+      $reexport[$table] = array();
+    }
+    $reexport[$table] = array_merge($entries, $reexport[$table]);
   }
 
   em_write_exportables($module, $reexport);
