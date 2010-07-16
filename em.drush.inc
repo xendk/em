@@ -1,6 +1,6 @@
 <?php
 
-// $Id: em.drush.inc,v 1.1 2010/06/21 20:44:59 xen Exp $
+// $Id$
 
 /*
 em status: * bedre listing?

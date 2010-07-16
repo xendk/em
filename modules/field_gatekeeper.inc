@@ -1,6 +1,6 @@
 <?php
 
-// $Id: field_gatekeeper.inc,v 1.2 2010/06/23 20:20:19 xen Exp $
+// $Id$
 
 /**
  * @file
