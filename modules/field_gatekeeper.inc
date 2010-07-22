@@ -151,6 +151,12 @@ function em_fg_gatekeeper_status($field) {
     return EM_STATUS_IN_DATABASE;
   }
 
+  $diffs = _field_gatekeeper_array_rdiff($field, $code_defined[$field['field_name']]);
+  if ($diffs) {
+    // The field supplied is different from its code defined counterpart.
+    return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
+  }
+
   $options = array('field_name' => $field['field_name']);
   $instances = content_field_instance_read($options);
 
@@ -173,17 +179,26 @@ function em_fg_instance_status($field) {
     return EM_STATUS_IN_DATABASE;
   }
 
+  $diffs = _field_gatekeeper_array_rdiff($field, $code_defined[$field['name']]);
+  if ($diffs) {
+    // The field supplied is different from its code defined counterpart.
+    return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
+  }
+
   $instances = content_field_instance_read($options);
   if (!$instances) {
-    return EM_STATUS_IN_CODE;
+    // Instance doesn't exist, then it's 'overridden'.
+    return EM_STATUS_IN_CODE | EM_STATUS_IN_DATABASE;
   }
 
   foreach ($instances as $instance) {
-    $diffs = _field_gatekeeper_array_rdiff($field, $code_defined[$field['name']]);
+    $diffs = _field_gatekeeper_array_rdiff($field, field_gatekeeper_instance_clean($instance));
     if ($diffs) {
-       return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
+      // The instance is different, ergo it's 'overridden'
+      return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
     }
   }
+  // Else, it's not overridden.
   return EM_STATUS_IN_CODE;
 }
 
