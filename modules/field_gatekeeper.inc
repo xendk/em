@@ -212,11 +212,8 @@ function em_fg_group_status($group) {
   if (!$code_defined[$group['name']]) {
     return EM_STATUS_IN_DATABASE;
   }
-  $db_group = $type_groups[$group['group_name']];
-  $db_group['name'] = $group['type_name'] . '-' . $group['group_name'];
-  $db_group['fields'] = array_keys($db_group['fields']);
 
-  $diffs = _field_gatekeeper_array_rdiff($group, $db_group);
+  $diffs = _field_gatekeeper_array_rdiff($group, $code_defined[$group['name']]);
   if ($diffs) {
     return EM_STATUS_IN_DATABASE | EM_STATUS_IN_CODE;
   }
