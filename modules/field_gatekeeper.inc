@@ -54,7 +54,7 @@ function field_gatekeeper_em_exportables() {
       //'export callback' => '',
       'to hook code callback' => 'em_fg_groups_to_hook_code',
       'status callback' => 'em_fg_group_status',
-      // 'delete callback' => 'em_fg_instance_delete',
+      'delete callback' => 'em_fg_group_delete',
       'is array' => TRUE,
     );
   }
@@ -246,6 +246,10 @@ function em_fg_gatekeeper_delete($field) {
 
 function em_fg_instance_delete($field) {
   field_gatekeeper($field);
+}
+
+function em_fg_group_delete($field) {
+  field_gatekeeper_group($field);
 }
 
 function em_fg_gatekeeper_to_hook_code($objects, $module) {
