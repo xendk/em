@@ -230,8 +230,9 @@ function em_fg_gatekeeper_delete($field) {
       $instances[] = $field_instance;
     }
   }
+
   // If no instances yet, there's nothing to revert.
-  if (sizeof($instances)) {
+  if (sizeof($instances) and em_fg_gatekeeper_status($field) != EM_STATUS_IN_CODE) {
     drush_print(dt('Reverting !field_name will also revert all instances of the field in the content types: @types.', array('!field_name' => $field['field_name'], '@types' => implode(', ', $content_types))));
     if(!drush_confirm(dt('Do you want to do this?'))) {
       return;
