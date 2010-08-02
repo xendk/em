@@ -32,6 +32,11 @@ function ctools_em_exportables() {
         'status callback' => 'em_ctools_status',
       );
     }
+    if (empty($export_types[$etable]['list callback']) ||
+        !function_exists($export_types[$etable]['list callback'])) {
+      $export_types[$etable]['list callback'] = 'ctools_export_default_list';
+      $export_types[$etable]['list arguments'] = array($etable, $schema);
+    }
   }
   return $export_types;
 }

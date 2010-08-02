@@ -747,8 +747,9 @@ function em_get_module_exports($module, $table) {
  */
 function em_get_site_exportables($table, $exportables = NULL) {
   $export = em_export($table);
-  if (is_null($exportables) and function_exists($export['list callback'])) {
-    $exportables = $export['list callback']();
+  if (is_null($exportables) && function_exists($export['list callback'])) {
+    $args = isset($export['list arguments']) ? $export['list arguments'] : array();
+    $exportables = call_user_func_array($export['list callback'], $args);
   }
   $args = isset($export['load arguments']) ? $export['load arguments'] : array();
   if (sizeof($exportables)) {
