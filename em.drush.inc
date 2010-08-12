@@ -368,9 +368,17 @@ function drush_em_diff() {
         $site_exports = em_get_site_exportables($table, $module_exports);
         foreach ($site_exports as $name => $database_export) {
           if (em_is_in_database($table, $database_export)) {
+
             if (function_exists($export['export callback'])) {
               drush_print($table . ' ' . $name . ':');
-              $code = $export['export callback']($module_exports[$name], '');
+              $args = isset($export['export arguments']) ? $export['export arguments'] : array();
+              $args[] = $module_exports[$name];
+              $args[] = '';
+              $code = call_user_func_array($export['export callback'], $args);
+              $args = isset($export['export arguments']) ? $export['export arguments'] : array();
+              $args[] = $database_export;
+              $args[] = '';
+              $database  = call_user_func_array($export['export callback'], $args);
               $database = $export['export callback']($database_export, '');
               drush_print(em_diff($code, $database, $diff_opts));
               drush_print();
@@ -462,10 +470,13 @@ function em_revert_exportables($exportables) {
         }
         else {
           drush_print(dt('Trying to revert @name.', array('@name' => $name)));
-          drush_op($exports[$table]['delete callback'], $object);
+          $args = isset($exports[$table]['delete arguments']) ? $exports[$table]['delete arguments'] : array();
+          array_unshift($args, $exports[$table]['delete callback']);
+          $args[] = $object;
+          $output .= call_user_func_array('drush_op', $args);
         }
       } else {
-        drush_set_error(dt('Don\' know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
+        drush_set_error(dt('Don\'t know how to revert @type, yet. Gonna do something about it, punk?.', array('@type' => $table)));
         $return = FALSE;
       }
     }
@@ -642,7 +653,11 @@ function em_write_exportables($module, $exportables) {
           $output .= " */\n";
           $output .= "function " . $module . "_{$export['default hook']}() {\n";
           foreach ($objects as $object) {
-            $output .= $export['export callback']($object, '  '); // if this function does not exist, better to error out than fail silently
+            $args = isset($export['export arguments']) ? $export['export arguments'] : array();
+            $args[] = $object;
+            $args[] = '  ';
+            $output .= call_user_func_array($export['export callback'], $args);
+
             $output .= "  \${$export['identifier']}s['" . check_plain($object->$export['key']) . "'] = \${$export['identifier']};\n\n";
           }
           $output .= " return \${$export['identifier']}s;\n";

@@ -37,6 +37,10 @@ function ctools_em_exportables() {
       $export_types[$etable]['list callback'] = 'ctools_export_default_list';
       $export_types[$etable]['list arguments'] = array($etable, $schema);
     }
+    if (empty($export_types[$etable]['export callback']) or !function_exists($export_types[$etable]['export callback'])) {
+      $export_types[$etable]['export callback'] = 'ctools_export_object';
+      $export_types[$etable]['export arguments'] = array($etable);
+    }
   }
   return $export_types;
 }
@@ -55,6 +59,10 @@ function ctools_em_exportables_alter($export_types) {
     ),
     'panels_mini' => array(
       'delete callback' => 'panels_mini_delete',
+    ),
+    'panels_layout' => array(
+      'delete callback' => 'ctools_export_crud_delete',
+      'delete arguments' => array('panels_layout'),
     ),
   );
   foreach ($overrides as $name => $override) {
