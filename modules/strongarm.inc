@@ -14,8 +14,6 @@
 function strongarm_em_exportables_alter($export_types) {
   static $overrides = array(
     'variable' => array(
-      // Stongarm 2.0 RC1 defines a non-existent export callback.
-      'export callback' => 'em_export_strongarm',
       'status callback' => 'em_strongarm_status',
       'delete callback' => 'em_strongarm_delete',
       'list callback' => 'em_strongarm_list',
@@ -26,10 +24,6 @@ function strongarm_em_exportables_alter($export_types) {
       $export_types[$name] = $override + $export_types[$name];
     }
   }
-}
-
-function em_export_strongarm($variable, $indent = '') {
-  return ctools_export_object('variable', $variable, $indent);
 }
 
 function em_strongarm_status($export) {
