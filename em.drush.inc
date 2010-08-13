@@ -379,7 +379,6 @@ function drush_em_diff() {
               $args[] = $database_export;
               $args[] = '';
               $database  = call_user_func_array($export['export callback'], $args);
-              $database = $export['export callback']($database_export, '');
               drush_print(em_diff($code, $database, $diff_opts));
               drush_print();
             }
